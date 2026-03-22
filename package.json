@@ -7,12 +7,14 @@
     "node": "22.x"
   },
   "scripts": {
+    "start": "node --experimental-sqlite app/server.js",
     "lint": "eslint . --config eslint.config.mjs",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
     "build:ts": "tsc --project scripts",
     "db:refresh": "npm run build:ts && node --experimental-sqlite scripts/built/dbRefresh.js",
     "db:seed": "npm run build:ts && node --experimental-sqlite scripts/built/dbSeed.js",
+    "db:seed:azure": "npm run build:ts && node scripts/built/dbSeedAzureSql.js",
     "db:update": "npm run build:ts && node --experimental-sqlite scripts/built/dbUpdate.js"
   },
   "repository": {
@@ -30,6 +32,7 @@
     "@eslint/json": "^1.1.0",
     "@types/deep-diff": "^1.0.5",
     "@types/mongodb": "^4.0.7",
+    "@types/mssql": "^9.1.9",
     "@types/node": "^25.5.0",
     "@vitest/coverage-v8": "^4.1.0",
     "@vitest/eslint-plugin": "^1.6.12",
@@ -47,6 +50,7 @@
   },
   "dependencies": {
     "@types/sql.js": "^1.4.10",
+    "mssql": "^11.0.1",
     "sql.js": "^1.14.1"
   }
 }

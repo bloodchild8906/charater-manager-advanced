@@ -7,7 +7,18 @@ type SourceYear = '2014' | '2024';
 type SourceCode = SourceYear | 'system';
 type TableName = 'lookups' | 'entities' | 'features' | 'spells' | 'items' | 'actors';
 type ApiReference = { index?: string; name?: string; url?: string; [key: string]: unknown };
-type InsertRow = Record<string, unknown>;
+export type InsertRow = Record<string, unknown>;
+
+export type NormalizedSeedData = {
+  sources: InsertRow[];
+  lookups: InsertRow[];
+  entities: InsertRow[];
+  features: InsertRow[];
+  spells: InsertRow[];
+  items: InsertRow[];
+  actors: InsertRow[];
+  links: InsertRow[];
+};
 
 type RegistryEntry = {
   table: TableName;
@@ -18,7 +29,7 @@ type RegistryEntry = {
   name: string | null;
 };
 
-const SOURCE_COLUMNS = [
+export const SOURCE_COLUMNS = [
   'id',
   'code',
   'name',
@@ -30,7 +41,7 @@ const SOURCE_COLUMNS = [
   'updated_at',
 ];
 
-const LOOKUP_COLUMNS = [
+export const LOOKUP_COLUMNS = [
   'id',
   'source_id',
   'lookup_type',
@@ -47,7 +58,7 @@ const LOOKUP_COLUMNS = [
   'updated_at',
 ];
 
-const ENTITY_COLUMNS = [
+export const ENTITY_COLUMNS = [
   'id',
   'source_id',
   'entity_type',
@@ -74,7 +85,7 @@ const ENTITY_COLUMNS = [
   'updated_at',
 ];
 
-const FEATURE_COLUMNS = [
+export const FEATURE_COLUMNS = [
   'id',
   'source_id',
   'feature_type',
@@ -99,7 +110,7 @@ const FEATURE_COLUMNS = [
   'updated_at',
 ];
 
-const SPELL_COLUMNS = [
+export const SPELL_COLUMNS = [
   'id',
   'source_id',
   'slug',
@@ -131,7 +142,7 @@ const SPELL_COLUMNS = [
   'updated_at',
 ];
 
-const ITEM_COLUMNS = [
+export const ITEM_COLUMNS = [
   'id',
   'source_id',
   'slug',
@@ -157,7 +168,7 @@ const ITEM_COLUMNS = [
   'updated_at',
 ];
 
-const ACTOR_COLUMNS = [
+export const ACTOR_COLUMNS = [
   'id',
   'source_id',
   'slug',
@@ -196,7 +207,7 @@ const ACTOR_COLUMNS = [
   'updated_at',
 ];
 
-const LINK_COLUMNS = [
+export const LINK_COLUMNS = [
   'id',
   'source_id',
   'link_type',
@@ -795,6 +806,35 @@ function computeLevelBounds(levels: any[]): { levelMin: number | null; levelMax:
   return { levelMin: Math.min(...numericLevels), levelMax: Math.max(...numericLevels) };
 }
 
+function parseChallengeRating(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    if (trimmed.includes('/')) {
+      const parts = trimmed.split('/');
+      if (parts.length === 2) {
+        const numerator = Number(parts[0]);
+        const denominator = Number(parts[1]);
+        if (!Number.isNaN(numerator) && !Number.isNaN(denominator) && denominator !== 0) {
+          return numerator / denominator;
+        }
+      }
+    }
+
+    const parsed = Number(trimmed);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+
+  return null;
+}
+
 function groupLevelsByKey(levels: any[], field: 'class' | 'subclass'): Map<string, any[]> {
   const groups = new Map<string, any[]>();
   for (const row of levels) {
@@ -823,7 +863,17 @@ function insertRows(db: DatabaseSync, tableName: string, columns: string[], rows
   db.exec('BEGIN');
   try {
     for (const row of rows) {
-      statement.run(...(columns.map((column) => (column in row ? row[column] : null)) as any[]));
+      const values = columns.map((column) => {
+        const rawValue = column in row ? row[column] : null;
+        if (typeof rawValue === 'boolean') {
+          return rawValue ? 1 : 0;
+        }
+        if (typeof rawValue === 'number' && Number.isNaN(rawValue)) {
+          return null;
+        }
+        return rawValue ?? null;
+      });
+      statement.run(...(values as any[]));
     }
     db.exec('COMMIT');
   } catch (error) {
@@ -2099,8 +2149,7 @@ function seedActors(ctx: SeedContext): void {
         size_lookup_id:
           typeof record.size === 'string' ? ctx.getLookupId('size', lookupCodeFromName(record.size)) : null,
         alignment_lookup_id: alignmentCode ? ctx.getLookupId('alignment', alignmentCode) : null,
-        challenge_rating:
-          typeof record.challenge_rating === 'number' ? record.challenge_rating : Number(record.challenge_rating),
+        challenge_rating: parseChallengeRating(record.challenge_rating),
         proficiency_bonus: typeof record.proficiency_bonus === 'number' ? record.proficiency_bonus : null,
         armor_class: extractArmorClassValue(record.armor_class),
         hit_points: typeof record.hit_points === 'number' ? record.hit_points : null,
@@ -2294,7 +2343,7 @@ function seedRuleLinks(ctx: SeedContext): void {
   });
 }
 
-export function seedNormalizedDatabase(db: DatabaseSync): void {
+export function buildNormalizedSeedData(): NormalizedSeedData {
   const ctx = new SeedContext();
   seedSources(ctx);
   seedManualLookups(ctx);
@@ -2306,24 +2355,39 @@ export function seedNormalizedDatabase(db: DatabaseSync): void {
   seedActors(ctx);
   seedRuleLinks(ctx);
 
-  insertRows(db, 'sources', SOURCE_COLUMNS, ctx.sourceRows);
-  insertRows(db, 'lookups', LOOKUP_COLUMNS, ctx.lookupRows);
-  insertRows(db, 'entities', ENTITY_COLUMNS, ctx.entityRows);
-  insertRows(db, 'features', FEATURE_COLUMNS, ctx.featureRows);
-  insertRows(db, 'spells', SPELL_COLUMNS, ctx.spellRows);
-  insertRows(db, 'items', ITEM_COLUMNS, ctx.itemRows);
-  insertRows(db, 'actors', ACTOR_COLUMNS, ctx.actorRows);
-  insertRows(db, 'links', LINK_COLUMNS, ctx.linkRows);
+  return {
+    sources: ctx.sourceRows,
+    lookups: ctx.lookupRows,
+    entities: ctx.entityRows,
+    features: ctx.featureRows,
+    spells: ctx.spellRows,
+    items: ctx.itemRows,
+    actors: ctx.actorRows,
+    links: ctx.linkRows,
+  };
+}
+
+export function seedNormalizedDatabase(db: DatabaseSync): void {
+  const data = buildNormalizedSeedData();
+
+  insertRows(db, 'sources', SOURCE_COLUMNS, data.sources);
+  insertRows(db, 'lookups', LOOKUP_COLUMNS, data.lookups);
+  insertRows(db, 'entities', ENTITY_COLUMNS, data.entities);
+  insertRows(db, 'features', FEATURE_COLUMNS, data.features);
+  insertRows(db, 'spells', SPELL_COLUMNS, data.spells);
+  insertRows(db, 'items', ITEM_COLUMNS, data.items);
+  insertRows(db, 'actors', ACTOR_COLUMNS, data.actors);
+  insertRows(db, 'links', LINK_COLUMNS, data.links);
 
   console.log(
     `Seeded normalized database: ` +
-      `${ctx.sourceRows.length} sources, ` +
-      `${ctx.lookupRows.length} lookups, ` +
-      `${ctx.entityRows.length} entities, ` +
-      `${ctx.featureRows.length} features, ` +
-      `${ctx.spellRows.length} spells, ` +
-      `${ctx.itemRows.length} items, ` +
-      `${ctx.actorRows.length} actors, ` +
-      `${ctx.linkRows.length} links.`
+      `${data.sources.length} sources, ` +
+      `${data.lookups.length} lookups, ` +
+      `${data.entities.length} entities, ` +
+      `${data.features.length} features, ` +
+      `${data.spells.length} spells, ` +
+      `${data.items.length} items, ` +
+      `${data.actors.length} actors, ` +
+      `${data.links.length} links.`
   );
 }

@@ -36,6 +36,12 @@ Or seed it directly with the dedicated seed script:
 npm run db:seed
 ```
 
+To run the lightweight status app locally:
+
+```bash
+npm start
+```
+
 To use a custom path:
 
 ```bash
@@ -49,6 +55,47 @@ SQLITE_DB_PATH=./tmp/5e-database.sqlite npm run db:refresh
 ```bash
 npm run db:update
 ```
+
+To seed Azure SQL instead of SQLite:
+
+```bash
+AZURE_SQL_SERVER=your-server.database.windows.net \
+AZURE_SQL_USERNAME=your-user \
+AZURE_SQL_PASSWORD=your-password \
+AZURE_SQL_DATABASE=dnd5e_srd_minimal \
+npm run db:seed:azure
+```
+
+When `AZURE_SQL_SERVER`, `AZURE_SQL_USERNAME`, and `AZURE_SQL_PASSWORD` are present, the runtime app automatically uses Azure SQL instead of SQLite.
+
+## Deployment
+
+The repo includes `.github/workflows/deploy-app-service.yml` for Azure App Service deployment.
+
+What the workflow does:
+
+- installs dependencies
+- builds the TypeScript seed scripts
+- runs the test suite
+- reseeds the live Azure SQL database
+- deploys the Node runtime app to Azure App Service
+
+Required GitHub Secrets:
+
+- `AZURE_CREDENTIALS`
+- `AZURE_SQL_SERVER`
+- `AZURE_SQL_USERNAME`
+- `AZURE_SQL_PASSWORD`
+- `AZURE_SQL_DATABASE` (optional, defaults in code to `dnd5e_srd_minimal`)
+
+Required GitHub Variables:
+
+- `AZURE_WEBAPP_NAME`
+
+The deployed app exposes:
+
+- `/health`
+- `/stats`
 
 ## API Issues
 

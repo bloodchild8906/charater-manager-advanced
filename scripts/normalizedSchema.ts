@@ -146,7 +146,7 @@ const SCHEMA_STATEMENTS = [
     taxonomy_lookup_id uuid REFERENCES lookups(id),
     size_lookup_id uuid REFERENCES lookups(id),
     alignment_lookup_id uuid REFERENCES lookups(id),
-    challenge_rating decimal(6,2),
+    challenge_rating decimal(6,3),
     proficiency_bonus int,
     armor_class int,
     hit_points int,

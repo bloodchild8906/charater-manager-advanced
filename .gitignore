@@ -1,1 +1,45 @@
-/.prettierrc
+# Dependencies
+node_modules/
+
+# Build output
+coverage/
+dist/
+scripts/built/
+.vite/
+
+# Runtime data
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
+*.db
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Test artifacts
+.nyc_output/
+
