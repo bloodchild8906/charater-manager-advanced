@@ -40,7 +40,9 @@ const MIME_TYPES = {
   '.jpeg': 'image/jpeg',
   '.map': 'application/json; charset=utf-8',
   '.png': 'image/png',
+  '.svg': 'image/svg+xml; charset=utf-8',
   '.wasm': 'application/wasm',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
 
 function writeJson(response, statusCode, body, headers = {}) {
@@ -613,7 +615,15 @@ const server = http.createServer(async (request, response) => {
 
     if (
       request.method === 'GET' &&
-      (pathname === '/app.js' || pathname === '/styles.css' || pathname.startsWith('/frontend/'))
+      (
+        pathname === '/app.js' ||
+        pathname === '/styles.css' ||
+        pathname === '/manifest.webmanifest' ||
+        pathname === '/sw.js' ||
+        pathname.startsWith('/frontend/') ||
+        pathname.startsWith('/styles/') ||
+        pathname.startsWith('/icons/')
+      )
     ) {
       await serveStaticFile(response, pathname.slice(1));
       return;

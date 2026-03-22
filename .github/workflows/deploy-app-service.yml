@@ -1,141 +1,351 @@
-name: Deploy To Azure App Service
+name: 🚀 Deploy to Azure App Service
 
 on:
   push:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      skip_seed:
+        description: 'Skip database seeding step'
+        required: false
+        default: 'false'
+        type: boolean
+      dry_run:
+        description: 'Dry run — build and test only, skip deploy'
+        required: false
+        default: 'false'
+        type: boolean
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 env:
   NODE_VERSION: '24'
+  ARTIFACT_NAME: app-service-package
 
+# ─────────────────────────────────────────────────────────────────────────────
 jobs:
-  build-test-seed:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+# ─────────────────────────────────────────────────────────────────────────────
 
-      - name: Setup Node.js
+  build-test-seed:
+    name: 🔨 Build · Test · Seed
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    outputs:
+      package_size:  ${{ steps.package_info.outputs.size }}
+      package_files: ${{ steps.package_info.outputs.files }}
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────────
+      - name: 📥 Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── Node.js Setup ──────────────────────────────────────────────────────────
+      - name: ⚙️ Set up Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - name: 📋 Print environment info
+        run: |
+          echo "──────────────────────────────────────────"
+          echo "  Node.js : $(node --version)"
+          echo "  npm     : $(npm --version)"
+          echo "  OS      : $(uname -srm)"
+          echo "  Commit  : ${{ github.sha }}"
+          echo "  Branch  : ${{ github.ref_name }}"
+          echo "  Actor   : ${{ github.actor }}"
+          echo "  Run #   : ${{ github.run_number }}"
+          echo "──────────────────────────────────────────"
 
-      - name: Build scripts
-        run: npm run build:ts
+      # ── Install ────────────────────────────────────────────────────────────────
+      - name: 📦 Install dependencies (npm ci)
+        run: |
+          echo "::group::npm ci output"
+          npm ci --prefer-offline
+          echo "::endgroup::"
+          PKG_COUNT=$(npm list --depth=0 2>/dev/null | tail -n +2 | wc -l | xargs)
+          echo "✅ Installed ${PKG_COUNT} top-level packages"
 
-      - name: Run tests
-        run: npm test
+      # ── Build ──────────────────────────────────────────────────────────────────
+      - name: 🔧 Compile TypeScript
+        run: |
+          echo "::group::TypeScript build output"
+          npm run build:ts
+          echo "::endgroup::"
+          echo "✅ TypeScript compilation complete"
 
-      - name: Seed selected database
+      # ── Test ───────────────────────────────────────────────────────────────────
+      - name: 🧪 Run test suite
+        run: |
+          echo "::group::Test runner output"
+          npm test
+          echo "::endgroup::"
+          echo "✅ All tests passed"
+
+      # ── Database Seed ──────────────────────────────────────────────────────────
+      - name: 🌱 Seed selected database
+        if: ${{ inputs.skip_seed != 'true' }}
         shell: bash
         env:
-          DATABASE_PROVIDER: ${{ vars.DATABASE_PROVIDER }}
-          AZURE_SQL_SERVER: ${{ secrets.AZURE_SQL_SERVER }}
-          AZURE_SQL_USERNAME: ${{ secrets.AZURE_SQL_USERNAME }}
-          AZURE_SQL_PASSWORD: ${{ secrets.AZURE_SQL_PASSWORD }}
-          AZURE_SQL_DATABASE: ${{ secrets.AZURE_SQL_DATABASE }}
-          MONGODB_DATABASE: ${{ vars.MONGODB_DATABASE }}
-          MONGODB_URI: ${{ secrets.MONGODB_URI }}
-          AZURE_COSMOS_CONNECTIONSTRING: ${{ secrets.AZURE_COSMOS_CONNECTIONSTRING }}
+          DATABASE_PROVIDER:                    ${{ vars.DATABASE_PROVIDER }}
+          AZURE_SQL_SERVER:                     ${{ secrets.AZURE_SQL_SERVER }}
+          AZURE_SQL_USERNAME:                   ${{ secrets.AZURE_SQL_USERNAME }}
+          AZURE_SQL_PASSWORD:                   ${{ secrets.AZURE_SQL_PASSWORD }}
+          AZURE_SQL_DATABASE:                   ${{ secrets.AZURE_SQL_DATABASE }}
+          MONGODB_DATABASE:                     ${{ vars.MONGODB_DATABASE }}
+          MONGODB_URI:                          ${{ secrets.MONGODB_URI }}
+          AZURE_COSMOS_CONNECTIONSTRING:        ${{ secrets.AZURE_COSMOS_CONNECTIONSTRING }}
           AZURE_COSMOS_LISTCONNECTIONSTRINGURL: ${{ secrets.AZURE_COSMOS_LISTCONNECTIONSTRINGURL }}
-          AZURE_COSMOS_SCOPE: ${{ vars.AZURE_COSMOS_SCOPE }}
-          AZURE_COSMOS_CLIENTID: ${{ secrets.AZURE_COSMOS_CLIENTID }}
-          AZURE_COSMOS_CLIENTSECRET: ${{ secrets.AZURE_COSMOS_CLIENTSECRET }}
-          AZURE_COSMOS_TENANTID: ${{ secrets.AZURE_COSMOS_TENANTID }}
+          AZURE_COSMOS_SCOPE:                   ${{ vars.AZURE_COSMOS_SCOPE }}
+          AZURE_COSMOS_CLIENTID:                ${{ secrets.AZURE_COSMOS_CLIENTID }}
+          AZURE_COSMOS_CLIENTSECRET:            ${{ secrets.AZURE_COSMOS_CLIENTSECRET }}
+          AZURE_COSMOS_TENANTID:                ${{ secrets.AZURE_COSMOS_TENANTID }}
         run: |
           if [ -z "${DATABASE_PROVIDER}${AZURE_SQL_SERVER}${MONGODB_URI}${AZURE_COSMOS_CONNECTIONSTRING}${AZURE_COSMOS_LISTCONNECTIONSTRINGURL}" ]; then
-            echo "Skipping remote seed because no online database settings were configured for GitHub Actions."
+            echo "⚠️  No online database settings detected — skipping remote seed."
             exit 0
           fi
-          npm run db:seed:online
 
-      - name: Create deploy package
+          echo "📊 Provider : ${DATABASE_PROVIDER:-<unset>}"
+          echo "::group::db:seed:online output"
+          npm run db:seed:online
+          echo "::endgroup::"
+          echo "✅ Database seeded successfully"
+
+      # ── Package Assembly ───────────────────────────────────────────────────────
+      - name: 📦 Assemble deploy package
         run: |
+          echo "::group::Package assembly"
           mkdir -p deploy-package
-          cp package.json deploy-package/package.json
+
+          echo "→ Copying package manifests..."
+          cp package.json      deploy-package/package.json
           cp package-lock.json deploy-package/package-lock.json
-          if [ -f .npmrc ]; then cp .npmrc deploy-package/.npmrc; fi
+          [ -f .npmrc ] && cp .npmrc deploy-package/.npmrc && echo "  → Copied .npmrc" || echo "  → No .npmrc, skipping"
+
+          echo "→ Copying app directory..."
           cp -R app deploy-package/
+
+          echo "→ Copying data directory..."
           cp -R data deploy-package/data
-          if [ -d public ]; then cp -R public deploy-package/public; fi
+
+          if [ -d public ]; then
+            echo "→ Copying public directory..."
+            cp -R public deploy-package/public
+          else
+            echo "→ No public directory, skipping"
+          fi
+
+          echo "→ Bundling @3d-dice/dice-box vendor assets..."
           mkdir -p deploy-package/app/vendor/dice-box
           cp -R node_modules/@3d-dice/dice-box/dist/* deploy-package/app/vendor/dice-box/
-          test -f deploy-package/app/server.js
-          test -f deploy-package/app/app.js
-          test ! -d deploy-package/app/app
 
-      - name: Upload deploy package
+          echo "::endgroup::"
+          echo "✅ Package assembly complete"
+
+      - name: 🔍 Verify deploy package integrity
+        id: package_info
+        run: |
+          echo "::group::Integrity checks"
+
+          echo "Verifying required entry points:"
+          test -f deploy-package/app/server.js  && echo "  ✅ app/server.js" || { echo "  ❌ app/server.js MISSING"; exit 1; }
+          test -f deploy-package/app/app.js     && echo "  ✅ app/app.js"    || { echo "  ❌ app/app.js MISSING";    exit 1; }
+          test ! -d deploy-package/app/app      && echo "  ✅ No app/app collision" || { echo "  ❌ app/app/ collision detected"; exit 1; }
+
+          DICE_COUNT=$(find deploy-package/app/vendor/dice-box -type f | wc -l | xargs)
+          echo ""
+          echo "Vendor assets:"
+          echo "  ✅ dice-box files: ${DICE_COUNT}"
+
+          echo ""
+          echo "Directory structure:"
+          find deploy-package -maxdepth 3 -type d | sort | sed 's|deploy-package||g; s|^|  📁|'
+
+          TOTAL_SIZE=$(du -sh deploy-package | cut -f1)
+          TOTAL_FILES=$(find deploy-package -type f | wc -l | xargs)
+          echo ""
+          echo "  Total size  : ${TOTAL_SIZE}"
+          echo "  Total files : ${TOTAL_FILES}"
+          echo "::endgroup::"
+
+          echo "size=${TOTAL_SIZE}"   >> "$GITHUB_OUTPUT"
+          echo "files=${TOTAL_FILES}" >> "$GITHUB_OUTPUT"
+
+      # ── Upload Artifact ────────────────────────────────────────────────────────
+      - name: ⬆️ Upload deploy artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-service-package
+          name: ${{ env.ARTIFACT_NAME }}
           path: deploy-package
+          retention-days: 3
+          if-no-files-found: error
+
+      # ── Job Summary ────────────────────────────────────────────────────────────
+      - name: 📝 Write job summary
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          ICON=$([[ "$STATUS" == "success" ]] && echo "✅" || echo "❌")
+          echo "## ${ICON} Build · Test · Seed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field         | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---------------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Status**    | \`${STATUS}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Commit**    | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Branch**    | \`${{ github.ref_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Node.js**   | \`$(node --version)\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Actor**     | \`${{ github.actor }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Run**       | [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Pkg Size**  | ${{ steps.package_info.outputs.size }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Pkg Files** | ${{ steps.package_info.outputs.files }} |" >> "$GITHUB_STEP_SUMMARY"
+
+# ─────────────────────────────────────────────────────────────────────────────
 
   deploy:
+    name: 🌐 Deploy to Azure App Service
     runs-on: ubuntu-latest
     needs: build-test-seed
-    environment: production
+    if: ${{ inputs.dry_run != 'true' }}
+    environment:
+      name: production
+      url: https://${{ vars.AZURE_WEBAPP_NAME }}.azurewebsites.net
+    permissions:
+      contents: read
+      id-token: write
+
     steps:
-      - name: Download deploy package
+      - name: 📋 Pre-deploy info
+        run: |
+          echo "──────────────────────────────────────────"
+          echo "  App Name   : ${{ vars.AZURE_WEBAPP_NAME }}"
+          echo "  Pkg Size   : ${{ needs.build-test-seed.outputs.package_size }}"
+          echo "  Pkg Files  : ${{ needs.build-test-seed.outputs.package_files }}"
+          echo "  Triggered  : ${{ github.event_name }}"
+          echo "  Run #      : ${{ github.run_number }}"
+          echo "──────────────────────────────────────────"
+
+      # ── Download Artifact ──────────────────────────────────────────────────────
+      - name: ⬇️ Download deploy artifact
         uses: actions/download-artifact@v4
         with:
-          name: app-service-package
+          name: ${{ env.ARTIFACT_NAME }}
           path: deploy-package
 
-      - name: Azure login
+      - name: 🔍 Confirm artifact integrity
+        run: |
+          FILE_COUNT=$(find deploy-package -type f | wc -l | xargs)
+          echo "Artifact file count: ${FILE_COUNT}"
+          test -f deploy-package/app/server.js && echo "✅ server.js present" || { echo "❌ server.js MISSING"; exit 1; }
+          test -f deploy-package/app/app.js    && echo "✅ app.js present"    || { echo "❌ app.js MISSING";    exit 1; }
+
+      # ── Azure Login ────────────────────────────────────────────────────────────
+      - name: 🔐 Azure login
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Build App Service settings payload
+      - name: ✅ Verify Azure session
+        run: |
+          echo "::group::Azure account info"
+          az account show --output table
+          echo "::endgroup::"
+
+      # ── App Service Settings ───────────────────────────────────────────────────
+      - name: 🔧 Build App Service settings payload
         id: build-app-settings
         shell: bash
         env:
-          DATABASE_PROVIDER: ${{ vars.DATABASE_PROVIDER }}
-          MONGODB_DATABASE: ${{ vars.MONGODB_DATABASE }}
-          AZURE_SQL_SERVER: ${{ secrets.AZURE_SQL_SERVER }}
+          DATABASE_PROVIDER:  ${{ vars.DATABASE_PROVIDER }}
+          MONGODB_DATABASE:   ${{ vars.MONGODB_DATABASE }}
+          AZURE_SQL_SERVER:   ${{ secrets.AZURE_SQL_SERVER }}
           AZURE_SQL_USERNAME: ${{ secrets.AZURE_SQL_USERNAME }}
           AZURE_SQL_PASSWORD: ${{ secrets.AZURE_SQL_PASSWORD }}
           AZURE_SQL_DATABASE: ${{ secrets.AZURE_SQL_DATABASE }}
         run: |
           node <<'EOF' >> "$GITHUB_OUTPUT"
           const settings = [
-            { name: 'WEBSITE_NODE_DEFAULT_VERSION', value: '~24', slotSetting: false },
-            { name: 'NODE_ENV', value: 'production', slotSetting: false },
-            { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'true', slotSetting: false },
-            { name: 'ENABLE_ORYX_BUILD', value: 'true', slotSetting: false },
+            { name: 'WEBSITE_NODE_DEFAULT_VERSION', value: '~24',        slotSetting: false },
+            { name: 'NODE_ENV',                     value: 'production', slotSetting: false },
+            { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'true',     slotSetting: false },
+            { name: 'ENABLE_ORYX_BUILD',            value: 'true',       slotSetting: false },
           ];
+
           const optionalSettings = [
-            ['DATABASE_PROVIDER', process.env.DATABASE_PROVIDER],
-            ['MONGODB_DATABASE', process.env.MONGODB_DATABASE],
-            ['AZURE_SQL_SERVER', process.env.AZURE_SQL_SERVER],
+            ['DATABASE_PROVIDER',  process.env.DATABASE_PROVIDER],
+            ['MONGODB_DATABASE',   process.env.MONGODB_DATABASE],
+            ['AZURE_SQL_SERVER',   process.env.AZURE_SQL_SERVER],
             ['AZURE_SQL_USERNAME', process.env.AZURE_SQL_USERNAME],
             ['AZURE_SQL_PASSWORD', process.env.AZURE_SQL_PASSWORD],
             ['AZURE_SQL_DATABASE', process.env.AZURE_SQL_DATABASE],
           ];
+
+          let injected = 0;
           for (const [name, value] of optionalSettings) {
             if (value && value.trim()) {
               settings.push({ name, value: value.trim(), slotSetting: false });
+              injected++;
             }
           }
+
+          process.stderr.write(`Settings payload: ${settings.length} total, ${injected} optional injected\n`);
           process.stdout.write(`app_settings_json<<JSON\n${JSON.stringify(settings)}\nJSON\n`);
           EOF
 
-      - name: Configure App Service settings
+      - name: ⚙️ Apply App Service settings
         uses: azure/appservice-settings@v1
         with:
           app-name: ${{ vars.AZURE_WEBAPP_NAME }}
           app-settings-json: ${{ steps.build-app-settings.outputs.app_settings_json }}
 
-      - name: Deploy to Azure App Service
+      # ── Deploy ─────────────────────────────────────────────────────────────────
+      - name: 🚀 Deploy to Azure App Service
+        id: deploy
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ vars.AZURE_WEBAPP_NAME }}
           package: deploy-package
+
+      # ── Health Check ───────────────────────────────────────────────────────────
+      - name: 🏥 Post-deploy health check
+        run: |
+          APP_URL="https://${{ vars.AZURE_WEBAPP_NAME }}.azurewebsites.net"
+          echo "Waiting 15s for the app to stabilize..."
+          sleep 15
+
+          echo "Pinging ${APP_URL}..."
+          HTTP_CODE=$(curl -o /dev/null -s -w "%{http_code}" --max-time 30 "${APP_URL}" || echo "000")
+
+          if [[ "${HTTP_CODE}" =~ ^[23] ]]; then
+            echo "✅ App is responding (HTTP ${HTTP_CODE})"
+          else
+            echo "⚠️  Unexpected response: HTTP ${HTTP_CODE} — verify the deployment manually"
+          fi
+
+      # ── Deploy Summary ─────────────────────────────────────────────────────────
+      - name: 📝 Write deploy summary
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          ICON=$([[ "$STATUS" == "success" ]] && echo "✅" || echo "❌")
+          APP_URL="https://${{ vars.AZURE_WEBAPP_NAME }}.azurewebsites.net"
+          echo "## ${ICON} Deploy to Azure App Service" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field      | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Status** | \`${STATUS}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **App**    | \`${{ vars.AZURE_WEBAPP_NAME }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **URL**    | [${APP_URL}](${APP_URL}) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Commit** | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Run**    | [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |" >> "$GITHUB_STEP_SUMMARY"

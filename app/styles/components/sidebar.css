@@ -1,0 +1,20 @@
+.roster-panel {
+  overflow: hidden;
+}
+
+.roster-panel .field {
+  margin-bottom: 14px;
+}
+
+.character-list {
+  max-height: calc(100vh - 290px);
+  overflow: auto;
+  padding-right: 6px;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 1180px) {
+  .character-list {
+    max-height: none;
+  }
+}

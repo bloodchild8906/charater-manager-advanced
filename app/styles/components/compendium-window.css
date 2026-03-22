@@ -1,0 +1,53 @@
+.compendium-window,
+.compendium-peek {
+  z-index: 180;
+}
+
+.compendium-window {
+  overflow: hidden;
+}
+
+.compendium-window__header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 18px 20px;
+  background: linear-gradient(180deg, rgba(72, 47, 35, 0.98), rgba(41, 27, 21, 0.96));
+}
+
+.compendium-window__body {
+  padding: 16px;
+}
+
+.compendium-window .compendium-modal__layout {
+  min-height: min(640px, calc(100vh - 220px));
+}
+
+.compendium-window .search-results,
+.compendium-window .compendium-detail {
+  min-height: 0;
+}
+
+@media (max-width: 980px) {
+  .compendium-window,
+  .compendium-window.is-docked,
+  .compendium-window.is-floating {
+    left: 12px !important;
+    top: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+    height: calc(100vh - 24px) !important;
+    max-width: none;
+    border-radius: 20px;
+  }
+
+  .compendium-window__header,
+  .compendium-window__controls {
+    gap: 10px;
+  }
+
+  .compendium-window .compendium-modal__layout {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+}

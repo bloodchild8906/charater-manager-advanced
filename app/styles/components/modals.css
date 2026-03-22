@@ -1,0 +1,73 @@
+.modal-overlay {
+  z-index: 260;
+  padding: 24px;
+  background: rgba(7, 4, 3, 0.72);
+  backdrop-filter: blur(14px);
+}
+
+.modal-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+}
+
+.modal-panel__body {
+  overflow: auto;
+}
+
+.modal-panel--choice {
+  width: min(840px, calc(100vw - 48px));
+}
+
+.modal-panel--entry {
+  width: min(920px, calc(100vw - 48px));
+}
+
+.modal-panel--wizard {
+  width: min(1120px, calc(100vw - 48px));
+}
+
+.create-flow-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.create-flow-card {
+  padding: 22px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 245, 220, 0.05);
+  border: 1px solid rgba(211, 180, 124, 0.16);
+}
+
+.wizard-progress {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(29, 19, 15, 0.78);
+  backdrop-filter: blur(12px);
+}
+
+.wizard-detail-drawer {
+  margin-top: 18px;
+}
+
+@media (max-width: 900px) {
+  .modal-overlay {
+    padding: 0;
+  }
+
+  .modal-panel,
+  .modal-panel--choice,
+  .modal-panel--entry,
+  .modal-panel--wizard {
+    width: 100vw;
+    min-height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+
+  .create-flow-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,59 @@
+.dice-viewport-shell {
+  position: fixed;
+  inset: 0;
+}
+
+[data-dice-toolbar-surface] {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+[data-dice-toolbar-surface] > * {
+  pointer-events: auto;
+}
+
+.dice-toolbar-shell,
+.dice-peek {
+  z-index: 140;
+}
+
+.dice-toolbar-shell {
+  width: min(760px, calc(100vw - 32px));
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+.dice-toolbar__header {
+  padding: 14px 16px;
+  background: linear-gradient(180deg, rgba(75, 50, 37, 0.98), rgba(43, 29, 22, 0.96));
+}
+
+.dice-toolbar__rail {
+  padding: 12px 16px;
+  background: rgba(16, 10, 8, 0.36);
+}
+
+.dice-toolbar__panel {
+  padding: 16px;
+}
+
+.dice-peek {
+  border: 1px solid rgba(211, 180, 124, 0.2);
+  background: linear-gradient(180deg, rgba(64, 42, 31, 0.96), rgba(30, 19, 15, 0.94));
+}
+
+@media (max-width: 720px) {
+  .dice-toolbar-shell {
+    left: 12px !important;
+    top: auto !important;
+    bottom: 12px;
+    width: calc(100vw - 24px);
+  }
+
+  .dice-peek {
+    left: 12px !important;
+    top: auto !important;
+    bottom: 12px;
+  }
+}
