@@ -17,6 +17,7 @@ const {
   getSessionWithUser,
   isGlobalCharacterAccess,
   listCharacters,
+  listDiceModels,
   listUsers,
   searchCompendium,
   touchSession,
@@ -25,12 +26,21 @@ const {
 } = require('./store');
 
 const APP_DIR = __dirname;
+const ROOT_DIR = path.resolve(APP_DIR, '..');
+const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
+const DICE_BOX_VENDOR_DIR = path.join(APP_DIR, 'vendor', 'dice-box');
+const DICE_BOX_DIST_DIR = path.join(ROOT_DIR, 'node_modules', '@3d-dice', 'dice-box', 'dist');
 const SESSION_COOKIE_NAME = 'character_manager_session';
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.map': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.wasm': 'application/wasm',
 };
 
 function writeJson(response, statusCode, body, headers = {}) {
@@ -114,8 +124,19 @@ async function readJsonBody(request) {
   }
 }
 
-async function serveStaticFile(response, fileName) {
-  const absolutePath = path.join(APP_DIR, fileName);
+function resolveStaticPath(baseDir, fileName) {
+  const absolutePath = path.resolve(baseDir, fileName);
+  if (absolutePath !== baseDir && !absolutePath.startsWith(`${baseDir}${path.sep}`)) {
+    const error = new Error('Not found.');
+    error.code = 'ENOENT';
+    throw error;
+  }
+
+  return absolutePath;
+}
+
+async function serveStaticFile(response, fileName, baseDir = APP_DIR) {
+  const absolutePath = resolveStaticPath(baseDir, fileName);
   const extension = path.extname(absolutePath).toLowerCase();
   const contentType = MIME_TYPES[extension] || 'application/octet-stream';
   const fileContents = await fs.readFile(absolutePath);
@@ -124,6 +145,19 @@ async function serveStaticFile(response, fileName) {
     'content-type': contentType,
   });
   response.end(fileContents);
+}
+
+async function serveStaticFileIfExists(response, fileName, baseDir = APP_DIR) {
+  try {
+    await serveStaticFile(response, fileName, baseDir);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return false;
+    }
+
+    throw error;
+  }
 }
 
 async function createSessionForUser(userId, userAgent) {
@@ -401,9 +435,10 @@ const server = http.createServer(async (request, response) => {
       }
 
       const edition = url.searchParams.get('edition') || 'all';
-      const [characters, compendium, users] = await Promise.all([
+      const [characters, compendium, diceModels, users] = await Promise.all([
         listCharacters(currentUser),
         getBootstrapData(edition),
+        listDiceModels(),
         currentUser.role === 'admin' ? listUsers() : Promise.resolve(null),
       ]);
 
@@ -412,6 +447,7 @@ const server = http.createServer(async (request, response) => {
         permissions: getPermissions(currentUser),
         characters,
         compendium,
+        diceModels,
         users,
       });
       return;
@@ -550,6 +586,27 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === 'GET' && (pathname === '/app.js' || pathname === '/styles.css')) {
       await serveStaticFile(response, pathname.slice(1));
+      return;
+    }
+
+    if (request.method === 'GET' && pathname.startsWith('/vendor/dice-box/')) {
+      const vendorFile = pathname.slice('/vendor/dice-box/'.length);
+      const served =
+        (await serveStaticFileIfExists(response, vendorFile, DICE_BOX_VENDOR_DIR)) ||
+        (await serveStaticFileIfExists(response, vendorFile, DICE_BOX_DIST_DIR));
+
+      if (!served) {
+        writeText(response, 404, 'Not found.');
+      }
+      return;
+    }
+
+    if (request.method === 'GET' && pathname.startsWith('/assets/')) {
+      const assetFile = pathname.slice('/assets/'.length);
+      const served = await serveStaticFileIfExists(response, assetFile, path.join(PUBLIC_DIR, 'assets'));
+      if (!served) {
+        writeText(response, 404, 'Not found.');
+      }
       return;
     }
 

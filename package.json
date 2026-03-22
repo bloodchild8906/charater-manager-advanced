@@ -49,6 +49,7 @@
     "vitest": "4.1.0"
   },
   "dependencies": {
+    "@3d-dice/dice-box": "1.1.4",
     "@azure/identity": "4.13.1",
     "@types/sql.js": "1.4.10",
     "mongodb": "6.16.0",

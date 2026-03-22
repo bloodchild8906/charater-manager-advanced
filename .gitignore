@@ -6,6 +6,7 @@ coverage/
 dist/
 scripts/built/
 .vite/
+public/assets/
 
 # Runtime data
 data/*.sqlite
@@ -42,4 +43,3 @@ temp/
 
 # Test artifacts
 .nyc_output/
-

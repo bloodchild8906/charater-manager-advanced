@@ -60,11 +60,14 @@ jobs:
       - name: Create deploy package
         run: |
           mkdir -p deploy-package
+          mkdir -p deploy-package/app/vendor/dice-box
           cp package.json deploy-package/package.json
           cp package-lock.json deploy-package/package-lock.json
           if [ -f .npmrc ]; then cp .npmrc deploy-package/.npmrc; fi
           cp -R app deploy-package/app
           cp -R data deploy-package/data
+          if [ -d public ]; then cp -R public deploy-package/public; fi
+          cp -R node_modules/@3d-dice/dice-box/dist/* deploy-package/app/vendor/dice-box/
 
       - name: Upload deploy package
         uses: actions/upload-artifact@v4

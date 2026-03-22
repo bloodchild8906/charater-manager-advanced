@@ -1,6 +1,9 @@
 /* global document, window */
 
 const appRoot = document.getElementById('app');
+const floatingRoot = ensureFloatingRoot();
+const compendiumRoot = ensureFloatingSurface('compendium-window-root');
+const diceRoot = ensureFloatingSurface('dice-toolbar-root');
 
 const ABILITY_KEYS = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
 const ABILITY_LABELS = {
@@ -19,13 +22,14 @@ const EDITION_OPTIONS = [
 const DIE_OPTIONS = [4, 6, 8, 10, 12, 20];
 const STANDARD_ABILITY_ARRAY = [15, 14, 13, 12, 10, 8];
 const SHEET_TABS = [
-  ['overview', 'Overview'],
+  ['core', 'Core'],
   ['combat', 'Combat'],
   ['inventory', 'Inventory'],
   ['spells', 'Spells'],
   ['features', 'Features'],
   ['notes', 'Notes'],
 ];
+const DICE_BOX_MODULE_PATH = '/vendor/dice-box/dice-box.es.js';
 
 const state = {
   authMode: 'login',
@@ -36,11 +40,22 @@ const state = {
   characters: [],
   activeCharacterId: null,
   rosterQuery: '',
-  sheetTab: 'overview',
+  sheetTab: 'core',
   compendiumType: 'spells',
   compendiumQuery: '',
   compendiumResults: [],
   compendiumOpen: false,
+  compendiumHidden: false,
+  compendiumPinned: true,
+  compendiumDock: 'right',
+  compendiumPosition: {
+    x: null,
+    y: null,
+  },
+  compendiumSize: {
+    width: 680,
+    height: 720,
+  },
   compendiumDetailIndex: null,
   editionFilter: 'all',
   loading: true,
@@ -53,13 +68,47 @@ const state = {
     count: 1,
     sides: 20,
     modifier: 0,
+    models: [],
+    activeModelKey: null,
     rolling: false,
+    ready: false,
+    initPending: false,
+    initError: null,
     rollId: 0,
-    timeoutId: null,
     lastRoll: null,
     history: [],
   },
 };
+
+let diceBoxImportPromise = null;
+let diceBoxInitPromise = null;
+let diceBoxInstance = null;
+let compendiumDragState = null;
+
+function ensureFloatingRoot() {
+  let root = document.getElementById('floating-overlay-root');
+  if (root) {
+    return root;
+  }
+
+  root = document.createElement('div');
+  root.id = 'floating-overlay-root';
+  document.body.append(root);
+  return root;
+}
+
+function ensureFloatingSurface(id) {
+  let surface = document.getElementById(id);
+  if (surface) {
+    return surface;
+  }
+
+  surface = document.createElement('div');
+  surface.id = id;
+  surface.className = 'floating-surface';
+  floatingRoot.append(surface);
+  return surface;
+}
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -122,6 +171,58 @@ function formatSigned(value) {
 
 function describeRollFormula(count, sides, modifier = 0) {
   return `${count}d${sides}${Number(modifier) === 0 ? '' : formatSigned(modifier)}`;
+}
+
+function getDefaultDiceModel(models = state.dice.models) {
+  if (!Array.isArray(models) || models.length === 0) {
+    return null;
+  }
+
+  return models.find((model) => model.isDefault) || models[0] || null;
+}
+
+function getActiveDiceModel() {
+  return (
+    state.dice.models.find((model) => model.key === state.dice.activeModelKey) ||
+    getDefaultDiceModel() ||
+    null
+  );
+}
+
+function buildDiceBoxConfig(model = getActiveDiceModel()) {
+  const baseConfig = model?.config && typeof model.config === 'object' ? model.config : {};
+  const theme = model?.theme || 'default';
+
+  return {
+    ...baseConfig,
+    assetPath: model?.assetPath || '/assets/',
+    theme,
+    ...(model?.themeColor ? { themeColor: model.themeColor } : {}),
+    ...(model?.externalThemeUrl ? { externalThemes: { [theme]: model.externalThemeUrl } } : {}),
+  };
+}
+
+function clampCompendiumPosition(position = state.compendiumPosition) {
+  const width = Math.min(state.compendiumSize.width, Math.max(360, window.innerWidth - 32));
+  const height = Math.min(state.compendiumSize.height, Math.max(420, window.innerHeight - 32));
+  const maxX = Math.max(16, window.innerWidth - width - 16);
+  const maxY = Math.max(16, window.innerHeight - height - 16);
+
+  return {
+    x: clampNumber(position.x, 16, maxX, maxX),
+    y: clampNumber(position.y, 16, maxY, 112),
+  };
+}
+
+function ensureCompendiumPosition() {
+  if (state.compendiumDock) {
+    return;
+  }
+
+  state.compendiumPosition = clampCompendiumPosition({
+    x: state.compendiumPosition.x,
+    y: state.compendiumPosition.y,
+  });
 }
 
 function createDefaultCharacter() {
@@ -375,12 +476,45 @@ function setSheetTab(tab) {
 
 function setCompendiumOpen(open) {
   state.compendiumOpen = open;
+  state.compendiumHidden = false;
   if (open && state.compendiumResults.length > 0 && state.compendiumDetailIndex == null) {
     state.compendiumDetailIndex = 0;
   } else if (!open) {
     state.compendiumDetailIndex = null;
   }
   render();
+}
+
+function hideCompendiumWindow() {
+  if (!state.compendiumOpen) {
+    return;
+  }
+
+  state.compendiumHidden = true;
+  renderFloatingSurfaces();
+}
+
+function restoreCompendiumWindow() {
+  state.compendiumOpen = true;
+  state.compendiumHidden = false;
+  renderFloatingSurfaces();
+}
+
+function toggleCompendiumPin() {
+  state.compendiumPinned = !state.compendiumPinned;
+  renderFloatingSurfaces();
+}
+
+function setCompendiumDock(side) {
+  if (state.compendiumDock === side) {
+    state.compendiumDock = null;
+    ensureCompendiumPosition();
+  } else {
+    state.compendiumDock = side;
+    state.compendiumHidden = false;
+  }
+
+  renderFloatingSurfaces();
 }
 
 function updateWizardDraft(path, value) {
@@ -514,13 +648,6 @@ async function advanceWizard() {
   render();
 }
 
-function clearDiceTimeout() {
-  if (state.dice.timeoutId) {
-    window.clearTimeout(state.dice.timeoutId);
-    state.dice.timeoutId = null;
-  }
-}
-
 function setDiceSetting(key, value) {
   if (key === 'count') {
     state.dice.count = clampNumber(value, 1, 6, 1);
@@ -551,29 +678,162 @@ function buildDiceRoll(values, sides, modifier) {
   };
 }
 
-function finishDiceAnimation() {
-  state.dice.rolling = false;
-  state.dice.timeoutId = null;
-  render();
+function buildDiceRollFromResults(results, sides, modifier) {
+  const values = (Array.isArray(results) ? results : [])
+    .map((entry) => Number(entry?.value))
+    .filter((value) => Number.isFinite(value));
+
+  return buildDiceRoll(values, sides, modifier);
 }
 
-function rollDice() {
+function syncDiceModels(models) {
+  const nextModels = Array.isArray(models) ? models : [];
+  const currentModelStillExists = nextModels.some((model) => model.key === state.dice.activeModelKey);
+  const defaultModel = getDefaultDiceModel(nextModels);
+
+  state.dice.models = nextModels;
+  state.dice.activeModelKey = currentModelStillExists ? state.dice.activeModelKey : defaultModel?.key || null;
+}
+
+async function applyDiceModelToBox() {
+  if (!diceBoxInstance) {
+    return;
+  }
+
+  const model = getActiveDiceModel();
+  if (!model) {
+    state.dice.initError = 'No dice model is available from the database.';
+    state.dice.ready = false;
+    renderFloatingSurfaces();
+    return;
+  }
+
+  state.dice.initPending = true;
+  state.dice.initError = null;
+  renderFloatingSurfaces();
+
+  try {
+    await diceBoxInstance.updateConfig(buildDiceBoxConfig(model));
+    state.dice.ready = true;
+    window.dispatchEvent(new Event('resize'));
+  } catch (error) {
+    state.dice.ready = false;
+    state.dice.initError = error.message;
+    throw error;
+  } finally {
+    state.dice.initPending = false;
+    renderFloatingSurfaces();
+  }
+}
+
+async function setDiceModel(modelKey) {
+  const nextModel =
+    state.dice.models.find((model) => model.key === modelKey) ||
+    getDefaultDiceModel();
+
+  if (!nextModel) {
+    return;
+  }
+
+  state.dice.activeModelKey = nextModel.key;
+  renderFloatingSurfaces();
+
+  if (diceBoxInstance) {
+    await applyDiceModelToBox();
+  }
+}
+
+async function ensureDiceBox() {
+  ensureDiceToolbarChrome();
+  if (diceBoxInstance) {
+    state.dice.ready = true;
+    return diceBoxInstance;
+  }
+
+  if (diceBoxInitPromise) {
+    return diceBoxInitPromise;
+  }
+
+  state.dice.initPending = true;
+  state.dice.initError = null;
+  renderFloatingSurfaces();
+
+  diceBoxInitPromise = (async () => {
+    if (!diceBoxImportPromise) {
+      diceBoxImportPromise = import(DICE_BOX_MODULE_PATH);
+    }
+
+    const { default: DiceBox } = await diceBoxImportPromise;
+    const activeModel = getActiveDiceModel();
+    if (!activeModel) {
+      throw new Error('No dice model is available from the database.');
+    }
+    diceBoxInstance = new DiceBox({
+      id: 'codex-dice-box',
+      container: '#dice-box-host',
+      ...buildDiceBoxConfig(activeModel),
+    });
+    await diceBoxInstance.init();
+    state.dice.ready = true;
+    state.dice.initError = null;
+    window.dispatchEvent(new Event('resize'));
+    return diceBoxInstance;
+  })()
+    .catch((error) => {
+      diceBoxInstance = null;
+      state.dice.ready = false;
+      state.dice.initError = error.message;
+      throw error;
+    })
+    .finally(() => {
+      state.dice.initPending = false;
+      diceBoxInitPromise = null;
+      renderFloatingSurfaces();
+    });
+
+  return diceBoxInitPromise;
+}
+
+async function rollDice() {
   const count = clampNumber(state.dice.count, 1, 6, 1);
   const sides = DIE_OPTIONS.includes(Number(state.dice.sides)) ? Number(state.dice.sides) : 20;
   const modifier = clampNumber(state.dice.modifier, -50, 50, 0);
-  const values = Array.from({ length: count }, () => Math.floor(Math.random() * sides) + 1);
-  const roll = buildDiceRoll(values, sides, modifier);
-
-  clearDiceTimeout();
   state.dice.count = count;
   state.dice.sides = sides;
   state.dice.modifier = modifier;
+  state.dice.open = true;
   state.dice.rollId += 1;
   state.dice.rolling = true;
-  state.dice.lastRoll = roll;
-  state.dice.history = [roll, ...state.dice.history].slice(0, 5);
-  state.dice.timeoutId = window.setTimeout(finishDiceAnimation, 1100);
-  render();
+  state.dice.initError = null;
+  renderFloatingSurfaces();
+
+  const activeRollId = state.dice.rollId;
+
+  try {
+    const box = await ensureDiceBox();
+    const roll = buildDiceRollFromResults(
+      await box.roll(describeRollFormula(count, sides, modifier)),
+      sides,
+      modifier
+    );
+
+    if (state.dice.rollId !== activeRollId) {
+      return;
+    }
+
+    state.dice.lastRoll = roll;
+    state.dice.history = [roll, ...state.dice.history].slice(0, 5);
+  } catch (error) {
+    if (state.dice.rollId === activeRollId) {
+      state.dice.initError = error.message;
+    }
+    setMessage('error', error.message);
+  } finally {
+    if (state.dice.rollId === activeRollId) {
+      state.dice.rolling = false;
+      renderFloatingSurfaces();
+    }
+  }
 }
 
 function setMessage(type, text) {
@@ -638,12 +898,21 @@ async function loadBootstrap() {
   state.permissions = payload.permissions;
   state.users = payload.users || [];
   state.compendium = payload.compendium;
+  syncDiceModels(payload.diceModels || []);
   state.characters = (payload.characters || []).map(normalizeCharacter);
   state.activeCharacterId =
     state.characters.find((character) => character.id === state.activeCharacterId)?.id ||
     state.characters[0]?.id ||
     null;
   state.compendiumResults = [];
+
+  if (diceBoxInstance) {
+    try {
+      await applyDiceModelToBox();
+    } catch (error) {
+      setMessage('error', error.message);
+    }
+  }
 }
 
 async function handleAuthSubmit() {
@@ -678,16 +947,22 @@ async function logout() {
     body: JSON.stringify({}),
   });
 
-  clearDiceTimeout();
   state.session = null;
   state.permissions = null;
   state.users = [];
   state.compendium = null;
   state.characters = [];
   state.activeCharacterId = null;
-  state.sheetTab = 'overview';
+  state.sheetTab = 'core';
   state.compendiumResults = [];
   state.compendiumOpen = false;
+  state.compendiumHidden = false;
+  state.compendiumPinned = true;
+  state.compendiumDock = 'right';
+  state.compendiumPosition = {
+    x: null,
+    y: null,
+  };
   state.compendiumDetailIndex = null;
   state.rosterQuery = '';
   state.createFlowOpen = false;
@@ -697,12 +972,18 @@ async function logout() {
     count: 1,
     sides: 20,
     modifier: 0,
+    models: [],
+    activeModelKey: null,
     rolling: false,
+    ready: false,
+    initPending: false,
+    initError: null,
     rollId: 0,
-    timeoutId: null,
     lastRoll: null,
     history: [],
   };
+  diceBoxInstance = null;
+  diceBoxInitPromise = null;
   setMessage('success', 'Signed out.');
 }
 
@@ -763,7 +1044,7 @@ async function createCharacterRecord(initialData = createDefaultCharacter()) {
 
   const character = normalizeCharacter(payload.character);
   upsertCharacterRecord(character);
-  state.sheetTab = 'overview';
+  state.sheetTab = 'core';
   setMessage('success', 'Character created.');
 }
 
@@ -775,7 +1056,7 @@ async function updateCharacterRecord(characterId, data, successMessage = 'Charac
 
   const updated = normalizeCharacter(payload.character);
   upsertCharacterRecord(updated);
-  state.sheetTab = 'overview';
+  state.sheetTab = 'core';
   setMessage('success', successMessage);
   return updated;
 }
@@ -874,6 +1155,10 @@ function addCompendiumEntry(index, targetList = null) {
       source: result.sourceCode || '',
       description: result.description || '',
     });
+  }
+
+  if (!state.compendiumPinned) {
+    state.compendiumHidden = true;
   }
 
   render();
@@ -1134,31 +1419,9 @@ function renderFeatureSection(character) {
   `;
 }
 
-function renderDie(value, sides, index) {
-  const rollSeed = state.dice.rollId + index + 1;
-  const rollX = 720 + rollSeed * 67;
-  const rollY = 900 + rollSeed * 83;
-  const drift = ((index % 3) - 1) * 10;
-  const displayValue = value == null ? '?' : value;
-
-  return `
-    <div
-      class="die die--d${sides} ${state.dice.rolling ? 'is-rolling' : ''} ${value == null ? 'die--placeholder' : ''}"
-      style="--roll-x:${rollX}deg; --roll-y:${rollY}deg; --drift:${drift}px; --delay:${index * 90}ms"
-    >
-      <div class="die__shadow"></div>
-      <div class="die__body">
-        <div class="die__face die__face--front">${escapeHtml(displayValue)}</div>
-        <div class="die__face die__face--top">d${escapeHtml(sides)}</div>
-        <div class="die__face die__face--side">${escapeHtml(displayValue)}</div>
-      </div>
-    </div>
-  `;
-}
-
 function renderDiceHistory() {
   if (state.dice.history.length === 0) {
-    return '<div class="empty-card empty-card--dice-history">No rolls yet. Pick a die and throw it.</div>';
+    return '<div class="empty-card empty-card--dice-history">No rolls yet. Pick a die and let Dice Box handle the throw.</div>';
   }
 
   return state.dice.history
@@ -1180,62 +1443,139 @@ function getSelectedCompendiumResult() {
   return state.compendiumResults[state.compendiumDetailIndex] || null;
 }
 
-function renderDiceToolbar() {
+function renderDiceSummary() {
   const activeRoll = state.dice.lastRoll || {
-    values: Array.from({ length: state.dice.count }, () => null),
-    sides: state.dice.sides,
-    modifier: state.dice.modifier,
     total: null,
     formula: describeRollFormula(state.dice.count, state.dice.sides, state.dice.modifier),
+    values: [],
+    modifier: state.dice.modifier,
   };
-  const diceMarkup = activeRoll.values.map((value, index) => renderDie(value, activeRoll.sides, index)).join('');
+  const activeModel = getActiveDiceModel();
 
   return `
-    <div class="dice-toolbar ${state.dice.open ? 'is-open' : ''}">
-      <div class="dice-toolbar__rail">
-        <button class="dice-toolbar__toggle" data-action="toggle-dice-toolbar">${state.dice.open ? 'Hide Dice' : 'Dice Toolbar'}</button>
-        ${DIE_OPTIONS.map((sides) => `
-          <button class="dice-toolbar__quick ${state.dice.sides === sides ? 'active' : ''}" data-action="quick-roll-die" data-sides="${sides}">d${sides}</button>
-        `).join('')}
-        <button class="button primary dice-toolbar__roll" data-action="roll-dice">Roll ${escapeHtml(describeRollFormula(state.dice.count, state.dice.sides, state.dice.modifier))}</button>
-      </div>
+    <div class="muted">${escapeHtml(activeModel?.name || 'No dice model')}</div>
+    <div class="dice-stage__formula">${escapeHtml(activeRoll.formula)}</div>
+    <div class="dice-stage__total">${escapeHtml(activeRoll.total == null ? '--' : String(activeRoll.total))}</div>
+    <div class="muted">
       ${
-        state.dice.open
-          ? `
-            <div class="dice-toolbar__panel">
-              <div class="dice-panel__controls">
-                <label class="field">
-                  <span class="label">Dice Count</span>
-                  <input class="input" id="dice-count" type="number" min="1" max="6" value="${escapeHtml(String(state.dice.count))}" />
-                </label>
-                <label class="field">
-                  <span class="label">Modifier</span>
-                  <input class="input" id="dice-modifier" type="number" min="-50" max="50" value="${escapeHtml(String(state.dice.modifier))}" />
-                </label>
-              </div>
-              <div class="dice-stage ${state.dice.rolling ? 'is-rolling' : ''}">
-                <div class="dice-stage__dice">
-                  ${diceMarkup}
-                </div>
-                <div class="dice-stage__summary">
-                  <div class="dice-stage__formula">${escapeHtml(activeRoll.formula)}</div>
-                  <div class="dice-stage__total">${escapeHtml(activeRoll.total == null ? '--' : String(activeRoll.total))}</div>
-                  <div class="muted">
-                    ${state.dice.lastRoll
-                      ? `Individual dice: ${escapeHtml(activeRoll.values.join(', '))}`
-                      : 'Use the quick dice buttons or the configured roll button to throw animated 3D dice.'}
-                  </div>
-                </div>
-              </div>
-              <div class="dice-history">
-                ${renderDiceHistory()}
-              </div>
-            </div>
-          `
-          : ''
+        state.dice.initError
+          ? escapeHtml(state.dice.initError)
+          : state.dice.rolling
+            ? 'Rolling through Dice Box...'
+            : state.dice.lastRoll
+              ? `Individual dice: ${escapeHtml(activeRoll.values.join(', '))}${activeRoll.modifier === 0 ? '' : ` ${escapeHtml(formatSigned(activeRoll.modifier))}`}`
+              : 'Pick a denomination, set the quantity, and roll a real Dice Box scene.'
       }
     </div>
   `;
+}
+
+function renderDiceToolbarRail() {
+  return `
+    <button class="dice-toolbar__toggle" data-action="toggle-dice-toolbar">${state.dice.open ? 'Hide Dice' : 'Dice Toolbar'}</button>
+    ${DIE_OPTIONS.map((sides) => `
+      <button class="dice-toolbar__quick ${state.dice.sides === sides ? 'active' : ''}" data-action="quick-roll-die" data-sides="${sides}">d${sides}</button>
+    `).join('')}
+    <button class="button primary dice-toolbar__roll" data-action="roll-dice" ${state.dice.initPending ? 'disabled' : ''}>Roll ${escapeHtml(describeRollFormula(state.dice.count, state.dice.sides, state.dice.modifier))}</button>
+  `;
+}
+
+function renderDiceToolbarControls() {
+  const activeModel = getActiveDiceModel();
+
+  return `
+    <div class="dice-toolbar__panel-copy">
+      <div>
+        <div class="section-title">Dice Box</div>
+        <div class="muted">Real 3D dice driven by the dice-model records in the database.</div>
+      </div>
+      <div class="dice-panel__controls">
+        <label class="field">
+          <span class="label">Model</span>
+          <select class="select" id="dice-model" ${state.dice.models.length === 0 ? 'disabled' : ''}>
+            ${
+              state.dice.models.length === 0
+                ? '<option value="">No models available</option>'
+                : state.dice.models
+                    .map(
+                      (model) => `
+                        <option value="${escapeHtml(model.key)}" ${activeModel?.key === model.key ? 'selected' : ''}>
+                          ${escapeHtml(model.name)}
+                        </option>
+                      `
+                    )
+                    .join('')
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span class="label">Dice Count</span>
+          <input class="input" id="dice-count" type="number" min="1" max="6" value="${escapeHtml(String(state.dice.count))}" />
+        </label>
+        <label class="field">
+          <span class="label">Modifier</span>
+          <input class="input" id="dice-modifier" type="number" min="-50" max="50" value="${escapeHtml(String(state.dice.modifier))}" />
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function renderDiceStageStatus() {
+  if (state.dice.initError) {
+    return `<div class="dice-stage__status-copy">Dice Box failed to load.<br />${escapeHtml(state.dice.initError)}</div>`;
+  }
+
+  if (state.dice.initPending) {
+    return '<div class="dice-stage__status-copy">Loading Dice Box assets...</div>';
+  }
+
+  if (!state.dice.ready) {
+    return '<div class="dice-stage__status-copy">Open the tray and roll to initialize the 3D scene.</div>';
+  }
+
+  return '';
+}
+
+function ensureDiceToolbarChrome() {
+  if (diceRoot.dataset.ready === 'true') {
+    return;
+  }
+
+  diceRoot.innerHTML = `
+    <section class="dice-toolbar-shell">
+      <div class="dice-toolbar__rail" data-dice-rail></div>
+      <div class="dice-toolbar__panel">
+        <div data-dice-controls></div>
+        <div class="dice-stage">
+          <div class="dice-stage__viewport">
+            <div class="dice-box-host" id="dice-box-host"></div>
+            <div class="dice-stage__status" data-dice-stage-status></div>
+          </div>
+          <div class="dice-stage__summary" data-dice-summary></div>
+        </div>
+        <div class="dice-history" data-dice-history></div>
+      </div>
+    </section>
+  `;
+  diceRoot.dataset.ready = 'true';
+}
+
+function syncDiceToolbarState() {
+  if (!state.session) {
+    diceRoot.innerHTML = '';
+    delete diceRoot.dataset.ready;
+    return;
+  }
+
+  ensureDiceToolbarChrome();
+  const shell = diceRoot.querySelector('.dice-toolbar-shell');
+  shell.classList.toggle('is-open', state.dice.open);
+  shell.querySelector('[data-dice-rail]').innerHTML = renderDiceToolbarRail();
+  shell.querySelector('[data-dice-controls]').innerHTML = renderDiceToolbarControls();
+  shell.querySelector('[data-dice-summary]').innerHTML = renderDiceSummary();
+  shell.querySelector('[data-dice-history]').innerHTML = renderDiceHistory();
+  shell.querySelector('[data-dice-stage-status]').innerHTML = renderDiceStageStatus();
 }
 
 function renderSheetTabs() {
@@ -1307,12 +1647,6 @@ function renderOverviewTab(character) {
             <div class="character-lineage">${escapeHtml(overview.lineage)}</div>
             <div class="meta-row">${renderMetaBits(overview.detailBits)}</div>
           </div>
-          <div class="button-row">
-            <button class="button subtle" data-action="open-compendium">Compendium</button>
-            <button class="button" data-action="open-levelup-wizard">Level ${escapeHtml(String(Math.min(20, Number(character.data.level || 1) + 1)))}</button>
-            <button class="button subtle" data-action="save-character">Save Sheet</button>
-            <button class="button danger" data-action="delete-character">Delete</button>
-          </div>
         </div>
         <div class="summary-grid">
           ${renderSummaryCards(character)}
@@ -1365,11 +1699,12 @@ function renderNotesPanel(character) {
 
 function renderEditor(character) {
   if (!character) {
+    const hasCharacters = state.characters.length > 0;
     return `
       <div class="editor-card empty-sheet">
-        <div class="eyebrow">No Active Sheet</div>
-        <h2 class="empty-sheet__title">Choose how you want to start a character.</h2>
-        <p class="empty-sheet__copy">Launch the step-by-step wizard or drop straight into a blank sheet. The compendium and dice toolbar stay around the sheet instead of occupying the editor itself.</p>
+        <div class="eyebrow">${hasCharacters ? 'Roster View' : 'No Active Sheet'}</div>
+        <h2 class="empty-sheet__title">${hasCharacters ? 'Select a character from the roster to enter the builder.' : 'Choose how you want to start a character.'}</h2>
+        <p class="empty-sheet__copy">${hasCharacters ? 'Use the roster on the left as your character index, or create a new sheet if the party is still growing.' : 'Launch the step-by-step wizard or drop straight into a blank sheet. The compendium and dice toolbar stay around the sheet instead of occupying the editor itself.'}</p>
         <div class="button-row">
           <button class="button primary" data-action="create-character">Create Character</button>
           <button class="button subtle" data-action="open-compendium">Open Compendium</button>
@@ -1378,6 +1713,7 @@ function renderEditor(character) {
     `;
   }
 
+  const overview = getCharacterOverview(character);
   let sheetContent = renderOverviewTab(character);
   if (state.sheetTab === 'combat') {
     sheetContent = renderCombatTab(character);
@@ -1393,88 +1729,110 @@ function renderEditor(character) {
 
   return `
     <section class="sheet-shell">
-      <header class="editor-card sheet-header">
-        <div class="sheet-header__copy">
-          <div class="eyebrow">Character Sheet</div>
-          <div class="sheet-header__title-row">
-            <h2 class="character-title">${escapeHtml(character.data.name)}</h2>
-            <span class="pill-badge">Lvl ${escapeHtml(character.data.level)}</span>
+      <header class="editor-card sheet-nav-shell">
+        <div class="sheet-nav-top">
+          <div class="sheet-nav-breadcrumbs">
+            <button class="sheet-nav-back" data-action="back-to-roster">&larr; Characters</button>
+            <span class="sheet-nav-divider"></span>
+            <span class="sheet-nav-current">Character Builder</span>
           </div>
-          <div class="character-lineage">${escapeHtml(getCharacterOverview(character).lineage)}</div>
-          <div class="meta-row">${renderMetaBits([editionLabel(character.data.edition), character.data.alignment || '', character.ownerDisplayName || ''])}</div>
+          <div class="sheet-nav-actions">
+            <button class="button subtle" data-action="open-compendium">Compendium</button>
+            <button class="button" data-action="open-levelup-wizard">Level Up</button>
+            <button class="button subtle" data-action="save-character">Save Sheet</button>
+            <button class="button danger" data-action="delete-character">Delete</button>
+          </div>
         </div>
-        <div class="sheet-header__actions">
-          <button class="button subtle" data-action="open-compendium">Compendium</button>
-          <button class="button" data-action="open-levelup-wizard">Level Up</button>
-          <button class="button subtle" data-action="save-character">Save Sheet</button>
-          <button class="button danger" data-action="delete-character">Delete</button>
+        <div class="sheet-header">
+          <div class="sheet-header__copy">
+            <div class="eyebrow">Character Sheet</div>
+            <div class="sheet-header__title-row">
+              <h2 class="character-title">${escapeHtml(character.data.name)}</h2>
+              <span class="pill-badge">Level ${escapeHtml(character.data.level)}</span>
+            </div>
+            <div class="character-lineage">${escapeHtml(overview.lineage)}</div>
+            <div class="meta-row">${renderMetaBits([editionLabel(character.data.edition), character.data.alignment || '', character.ownerDisplayName || ''])}</div>
+          </div>
+          <div class="sheet-header__summary">
+            <div class="sheet-header__summary-card">
+              <span class="label">Hit Points</span>
+              <strong>${escapeHtml(`${character.data.hp.current}/${character.data.hp.max}`)}</strong>
+            </div>
+            <div class="sheet-header__summary-card">
+              <span class="label">Armor Class</span>
+              <strong>${escapeHtml(String(character.data.ac))}</strong>
+            </div>
+            <div class="sheet-header__summary-card">
+              <span class="label">Initiative</span>
+              <strong>${escapeHtml(formatSigned(character.data.initiative))}</strong>
+            </div>
+          </div>
         </div>
+        <section class="sheet-identity">
+          <div class="sheet-identity__grid">
+            <label class="field">
+              <span class="label">Name</span>
+              <input class="input" data-bind="name" value="${escapeHtml(character.data.name)}" />
+            </label>
+            <label class="field">
+              <span class="label">Alignment</span>
+              <input class="input" data-bind="alignment" value="${escapeHtml(character.data.alignment)}" />
+            </label>
+            <label class="field">
+              <span class="label">Edition</span>
+              <select class="select" data-bind="edition">
+                ${EDITION_OPTIONS.map(([value, label]) => `<option value="${value}" ${character.data.edition === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+              </select>
+            </label>
+            <label class="field">
+              <span class="label">Class</span>
+              <select class="select" data-bind="classSlug">
+                <option value="">Choose a class</option>
+                ${(state.compendium?.classes || [])
+                  .map(
+                    (entry) => `
+                      <option value="${escapeHtml(entry.slug)}" ${entry.slug === character.data.classSlug ? 'selected' : ''}>
+                        ${escapeHtml(entry.name)}${entry.sourceCode ? ` (${escapeHtml(entry.sourceCode)})` : ''}
+                      </option>
+                    `
+                  )
+                  .join('')}
+              </select>
+            </label>
+            <label class="field">
+              <span class="label">Ancestry</span>
+              <select class="select" data-bind="ancestrySlug">
+                <option value="">Choose an ancestry</option>
+                ${(state.compendium?.ancestries || [])
+                  .map(
+                    (entry) => `
+                      <option value="${escapeHtml(entry.slug)}" ${entry.slug === character.data.ancestrySlug ? 'selected' : ''}>
+                        ${escapeHtml(entry.name)}${entry.sourceCode ? ` (${escapeHtml(entry.sourceCode)})` : ''}
+                      </option>
+                    `
+                  )
+                  .join('')}
+              </select>
+            </label>
+            <label class="field">
+              <span class="label">Background</span>
+              <select class="select" data-bind="backgroundSlug">
+                <option value="">Choose a background</option>
+                ${(state.compendium?.backgrounds || [])
+                  .map(
+                    (entry) => `
+                      <option value="${escapeHtml(entry.slug)}" ${entry.slug === character.data.backgroundSlug ? 'selected' : ''}>
+                        ${escapeHtml(entry.name)}${entry.sourceCode ? ` (${escapeHtml(entry.sourceCode)})` : ''}
+                      </option>
+                    `
+                  )
+                  .join('')}
+              </select>
+            </label>
+          </div>
+        </section>
+        ${renderSheetTabs()}
       </header>
-
-      <section class="editor-card sheet-identity">
-        <div class="sheet-identity__grid">
-          <label class="field">
-            <span class="label">Name</span>
-            <input class="input" data-bind="name" value="${escapeHtml(character.data.name)}" />
-          </label>
-          <label class="field">
-            <span class="label">Alignment</span>
-            <input class="input" data-bind="alignment" value="${escapeHtml(character.data.alignment)}" />
-          </label>
-          <label class="field">
-            <span class="label">Edition</span>
-            <select class="select" data-bind="edition">
-              ${EDITION_OPTIONS.map(([value, label]) => `<option value="${value}" ${character.data.edition === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
-            </select>
-          </label>
-          <label class="field">
-            <span class="label">Class</span>
-            <select class="select" data-bind="classSlug">
-              <option value="">Choose a class</option>
-              ${(state.compendium?.classes || [])
-                .map(
-                  (entry) => `
-                    <option value="${escapeHtml(entry.slug)}" ${entry.slug === character.data.classSlug ? 'selected' : ''}>
-                      ${escapeHtml(entry.name)}${entry.sourceCode ? ` (${escapeHtml(entry.sourceCode)})` : ''}
-                    </option>
-                  `
-                )
-                .join('')}
-            </select>
-          </label>
-          <label class="field">
-            <span class="label">Ancestry</span>
-            <select class="select" data-bind="ancestrySlug">
-              <option value="">Choose an ancestry</option>
-              ${(state.compendium?.ancestries || [])
-                .map(
-                  (entry) => `
-                    <option value="${escapeHtml(entry.slug)}" ${entry.slug === character.data.ancestrySlug ? 'selected' : ''}>
-                      ${escapeHtml(entry.name)}${entry.sourceCode ? ` (${escapeHtml(entry.sourceCode)})` : ''}
-                    </option>
-                  `
-                )
-                .join('')}
-            </select>
-          </label>
-          <label class="field">
-            <span class="label">Background</span>
-            <select class="select" data-bind="backgroundSlug">
-              <option value="">Choose a background</option>
-              ${(state.compendium?.backgrounds || [])
-                .map(
-                  (entry) => `
-                    <option value="${escapeHtml(entry.slug)}" ${entry.slug === character.data.backgroundSlug ? 'selected' : ''}>
-                      ${escapeHtml(entry.name)}${entry.sourceCode ? ` (${escapeHtml(entry.sourceCode)})` : ''}
-                    </option>
-                  `
-                )
-                .join('')}
-            </select>
-          </label>
-        </div>
-      </section>
-      ${renderSheetTabs()}
       <div class="sheet-content">
         ${sheetContent}
       </div>
@@ -1750,6 +2108,8 @@ function renderCompendiumDetail() {
     return '<div class="compendium-detail__empty">Search the compendium and select a result to inspect it in detail.</div>';
   }
 
+  const hasCharacter = Boolean(activeCharacter());
+
   return `
     <div class="compendium-detail__card">
       <div class="section-title">Selected Entry</div>
@@ -1757,28 +2117,53 @@ function renderCompendiumDetail() {
       <div class="muted">${renderMetaBits([result.sourceCode || '', result.level != null ? `Level ${result.level}` : '', result.featureType || ''])}</div>
       <p class="compendium-detail__copy">${escapeHtml(result.description || 'No description available.')}</p>
       <div class="button-row">
-        <button class="button primary" data-action="add-compendium" data-index="${escapeHtml(String(state.compendiumDetailIndex))}">Add to Sheet</button>
+        <button class="button primary" data-action="add-compendium" data-index="${escapeHtml(String(state.compendiumDetailIndex))}" ${hasCharacter ? '' : 'disabled'}>${hasCharacter ? 'Add to Sheet' : 'Select a Character'}</button>
       </div>
     </div>
   `;
 }
 
-function renderCompendium() {
+function renderCompendiumWindow() {
   if (!state.compendiumOpen) {
     return '';
   }
 
+  if (state.compendiumHidden) {
+    return `
+      <button class="compendium-peek ${state.compendiumPinned ? 'is-pinned' : ''}" data-action="restore-compendium">
+        <span>Compendium</span>
+        <strong>${escapeHtml(titleize(state.compendiumType.slice(0, -1), state.compendiumType))}</strong>
+      </button>
+    `;
+  }
+
+  const activeCharacterLabel = activeCharacter()?.data.name || 'No character selected';
+  const floatingPosition = state.compendiumDock ? null : clampCompendiumPosition(state.compendiumPosition);
+  if (floatingPosition) {
+    state.compendiumPosition = floatingPosition;
+  }
+
   return `
-    <div class="modal-overlay">
-      <section class="modal-panel modal-panel--compendium">
-        <div class="modal-panel__header">
-          <div>
-            <div class="section-title">Compendium</div>
-            <h3 class="modal-title">Search, inspect, and add entries</h3>
-          </div>
+    <section
+      class="compendium-window ${state.compendiumDock ? `is-docked is-docked--${state.compendiumDock}` : 'is-floating'} ${state.compendiumPinned ? 'is-pinned' : ''}"
+      ${floatingPosition ? `style="left:${floatingPosition.x}px; top:${floatingPosition.y}px; width:min(${state.compendiumSize.width}px, calc(100vw - 32px)); height:min(${state.compendiumSize.height}px, calc(100vh - 32px));"` : ''}
+    >
+      <header class="compendium-window__header" data-compendium-drag-handle="true">
+        <div>
+          <div class="section-title">Compendium</div>
+          <h3 class="compendium-window__title">Search, inspect, and drag to the sheet</h3>
+          <div class="muted">${escapeHtml(activeCharacterLabel)}${state.compendiumPinned ? ' · pinned' : ' · auto-hide after add'}</div>
+        </div>
+        <div class="compendium-window__controls">
+          <button class="button subtle ${state.compendiumDock === 'left' ? 'active' : ''}" data-action="dock-compendium" data-side="left">Dock Left</button>
+          <button class="button subtle ${state.compendiumDock === 'right' ? 'active' : ''}" data-action="dock-compendium" data-side="right">Dock Right</button>
+          <button class="button subtle" data-action="toggle-compendium-pin">${state.compendiumPinned ? 'Unpin' : 'Pin'}</button>
+          <button class="button subtle" data-action="hide-compendium">Hide</button>
           <button class="modal-close" data-action="close-compendium">&times;</button>
         </div>
-        <div class="compendium-card">
+      </header>
+      <div class="compendium-window__body">
+        <div class="compendium-card compendium-card--window">
           <div class="compendium-toolbar">
             <div class="tabs tabs--stretch">
               ${['spells', 'items', 'features']
@@ -1807,9 +2192,23 @@ function renderCompendium() {
             </aside>
           </div>
         </div>
-      </section>
-    </div>
+      </div>
+    </section>
   `;
+}
+
+function syncCompendiumWindowState() {
+  if (!state.session) {
+    compendiumRoot.innerHTML = '';
+    return;
+  }
+
+  compendiumRoot.innerHTML = renderCompendiumWindow();
+}
+
+function renderFloatingSurfaces() {
+  syncCompendiumWindowState();
+  syncDiceToolbarState();
 }
 
 function renderAdminPanel() {
@@ -1880,15 +2279,16 @@ function renderSidebar() {
 
 function renderApp() {
   const character = activeCharacter();
+  const focusMode = Boolean(character);
 
   return `
     <div class="screen app-screen">
       <div class="app-shell">
-        <header class="panel topbar topbar--campaign">
+        <header class="panel topbar topbar--campaign ${focusMode ? 'topbar--sheet-focus' : ''}">
           <div class="topbar__copy">
             <div class="eyebrow">Codex Arcanum Character Manager</div>
-            <div class="topbar-title">A sheet-first workspace inspired by builder and VTT patterns.</div>
-            <div class="topbar-meta">${renderMetaBits([`Signed in as ${state.session.displayName}`, state.session.email])}</div>
+            <div class="topbar-title">${focusMode ? 'Character Builder Navigation' : 'Roster and builder workspace.'}</div>
+            <div class="topbar-meta">${renderMetaBits([`Signed in as ${state.session.displayName}`, state.session.email, focusMode ? character.data.name : ''])}</div>
           </div>
           <div class="topbar__actions">
             <div class="topbar__badges">
@@ -1898,25 +2298,30 @@ function renderApp() {
             <select class="select" data-action="edition-filter">
               ${EDITION_OPTIONS.map(([value, label]) => `<option value="${value}" ${state.editionFilter === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
             </select>
+            ${focusMode ? '<button class="button subtle" data-action="back-to-roster">Characters</button>' : ''}
             <button class="button subtle" data-action="open-compendium">Compendium</button>
             <button class="button" data-action="logout">Sign Out</button>
           </div>
         </header>
         ${renderMessage()}
-        <div class="workspace">
-          <aside class="sidebar">
-            ${renderSidebar()}
-            ${renderAdminPanel()}
-          </aside>
-          <main class="editor">
+        <div class="workspace ${focusMode ? 'workspace--sheet-focus' : ''}">
+          ${
+            focusMode
+              ? ''
+              : `
+                  <aside class="sidebar">
+                    ${renderSidebar()}
+                    ${renderAdminPanel()}
+                  </aside>
+                `
+          }
+          <main class="editor ${focusMode ? 'editor--sheet-focus' : ''}">
             ${renderEditor(character)}
           </main>
         </div>
       </div>
-      ${renderCompendium()}
       ${renderCreateFlowModal()}
       ${renderWizardModal()}
-      ${renderDiceToolbar()}
     </div>
   `;
 }
@@ -1932,13 +2337,15 @@ function render() {
         </div>
       </div>
     `;
+    renderFloatingSurfaces();
     return;
   }
 
   appRoot.innerHTML = state.session ? renderApp() : renderAuth();
+  renderFloatingSurfaces();
 }
 
-appRoot.addEventListener('click', async (event) => {
+async function handleActionClick(event) {
   const target = event.target.closest('[data-action]');
   if (!target) {
     return;
@@ -1969,9 +2376,20 @@ appRoot.addEventListener('click', async (event) => {
         closeCreateFlow();
         await createCharacterRecord();
         break;
+      case 'back-to-roster':
+        state.activeCharacterId = null;
+        state.sheetTab = 'core';
+        if (!state.compendiumPinned) {
+          state.compendiumHidden = true;
+        }
+        render();
+        break;
       case 'select-character':
         state.activeCharacterId = target.dataset.characterId;
-        state.sheetTab = 'overview';
+        state.sheetTab = 'core';
+        if (!state.compendiumPinned) {
+          state.compendiumHidden = true;
+        }
         render();
         break;
       case 'sheet-tab':
@@ -1989,8 +2407,20 @@ appRoot.addEventListener('click', async (event) => {
           await runCompendiumSearch();
         }
         break;
+      case 'restore-compendium':
+        restoreCompendiumWindow();
+        break;
+      case 'hide-compendium':
+        hideCompendiumWindow();
+        break;
       case 'close-compendium':
         setCompendiumOpen(false);
+        break;
+      case 'toggle-compendium-pin':
+        toggleCompendiumPin();
+        break;
+      case 'dock-compendium':
+        setCompendiumDock(target.dataset.side);
         break;
       case 'search-compendium':
         state.compendiumQuery = document.getElementById('compendium-query')?.value || '';
@@ -2047,15 +2477,22 @@ appRoot.addEventListener('click', async (event) => {
         break;
       case 'toggle-dice-toolbar':
         state.dice.open = !state.dice.open;
-        render();
+        renderFloatingSurfaces();
+        if (state.dice.open) {
+          try {
+            await ensureDiceBox();
+          } catch (error) {
+            setMessage('error', error.message);
+          }
+        }
         break;
       case 'quick-roll-die':
         setDiceSetting('sides', Number(target.dataset.sides));
-        render();
-        rollDice();
+        renderFloatingSurfaces();
+        await rollDice();
         break;
       case 'roll-dice':
-        rollDice();
+        await rollDice();
         break;
       case 'add-entry': {
         const character = activeCharacter();
@@ -2094,9 +2531,9 @@ appRoot.addEventListener('click', async (event) => {
   } catch (error) {
     setMessage('error', error.message);
   }
-});
+}
 
-appRoot.addEventListener('dragstart', (event) => {
+function handleCompendiumDragStart(event) {
   const target = event.target.closest('[data-compendium-index]');
   if (!target) {
     return;
@@ -2109,9 +2546,9 @@ appRoot.addEventListener('dragstart', (event) => {
     })
   );
   event.dataTransfer.effectAllowed = 'copy';
-});
+}
 
-appRoot.addEventListener('dragover', (event) => {
+function handleSheetDragOver(event) {
   const dropZone = event.target.closest('[data-dropzone]');
   if (!dropZone) {
     return;
@@ -2119,9 +2556,9 @@ appRoot.addEventListener('dragover', (event) => {
 
   event.preventDefault();
   event.dataTransfer.dropEffect = 'copy';
-});
+}
 
-appRoot.addEventListener('drop', (event) => {
+function handleSheetDrop(event) {
   const dropZone = event.target.closest('[data-dropzone]');
   if (!dropZone) {
     return;
@@ -2137,9 +2574,9 @@ appRoot.addEventListener('drop', (event) => {
   } catch {
     // Ignore invalid drag payloads.
   }
-});
+}
 
-appRoot.addEventListener('input', (event) => {
+function handleInput(event) {
   const target = event.target;
 
   if (target.matches('[data-bind]')) {
@@ -2183,21 +2620,26 @@ appRoot.addEventListener('input', (event) => {
     state.rosterQuery = target.value;
     render();
   }
-});
+}
 
-appRoot.addEventListener('change', async (event) => {
+async function handleChange(event) {
   const target = event.target;
 
   try {
+    if (target.id === 'dice-model') {
+      await setDiceModel(target.value);
+      return;
+    }
+
     if (target.id === 'dice-count') {
       setDiceSetting('count', target.value);
-      render();
+      renderFloatingSurfaces();
       return;
     }
 
     if (target.id === 'dice-modifier') {
       setDiceSetting('modifier', target.value);
-      render();
+      renderFloatingSurfaces();
       return;
     }
 
@@ -2235,6 +2677,79 @@ appRoot.addEventListener('change', async (event) => {
   } catch (error) {
     setMessage('error', error.message);
   }
+}
+
+function startCompendiumDrag(event) {
+  const handle = event.target.closest('[data-compendium-drag-handle]');
+  if (!handle || event.button !== 0) {
+    return;
+  }
+
+  if (event.target.closest('button, input, select, textarea')) {
+    return;
+  }
+
+  const windowElement = handle.closest('.compendium-window');
+  if (!windowElement) {
+    return;
+  }
+
+  const rect = windowElement.getBoundingClientRect();
+  state.compendiumDock = null;
+  state.compendiumPosition = clampCompendiumPosition({
+    x: rect.left,
+    y: rect.top,
+  });
+  compendiumDragState = {
+    offsetX: event.clientX - rect.left,
+    offsetY: event.clientY - rect.top,
+  };
+  event.preventDefault();
+  renderFloatingSurfaces();
+}
+
+function handleCompendiumPointerMove(event) {
+  if (!compendiumDragState || state.compendiumDock) {
+    return;
+  }
+
+  state.compendiumPosition = clampCompendiumPosition({
+    x: event.clientX - compendiumDragState.offsetX,
+    y: event.clientY - compendiumDragState.offsetY,
+  });
+
+  const windowElement = compendiumRoot.querySelector('.compendium-window.is-floating');
+  if (!windowElement) {
+    return;
+  }
+
+  windowElement.style.left = `${state.compendiumPosition.x}px`;
+  windowElement.style.top = `${state.compendiumPosition.y}px`;
+}
+
+function stopCompendiumDrag() {
+  compendiumDragState = null;
+}
+
+function bindInteractiveRoot(root) {
+  root.addEventListener('click', handleActionClick);
+  root.addEventListener('dragstart', handleCompendiumDragStart);
+  root.addEventListener('dragover', handleSheetDragOver);
+  root.addEventListener('drop', handleSheetDrop);
+  root.addEventListener('input', handleInput);
+  root.addEventListener('change', handleChange);
+}
+
+bindInteractiveRoot(appRoot);
+bindInteractiveRoot(floatingRoot);
+floatingRoot.addEventListener('pointerdown', startCompendiumDrag);
+window.addEventListener('pointermove', handleCompendiumPointerMove);
+window.addEventListener('pointerup', stopCompendiumDrag);
+window.addEventListener('resize', () => {
+  if (!state.compendiumDock) {
+    state.compendiumPosition = clampCompendiumPosition(state.compendiumPosition);
+  }
+  renderFloatingSurfaces();
 });
 
 loadSession();

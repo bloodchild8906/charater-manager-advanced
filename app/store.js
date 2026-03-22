@@ -10,6 +10,32 @@ const {
 const ROLES = ['admin', 'gm', 'player'];
 const COMPENDIUM_TYPES = ['spells', 'items', 'features'];
 const EDITION_CODES = ['2014', '2024', 'system'];
+const DEFAULT_DICE_MODEL_TIMESTAMP = '2026-03-22T00:00:00.000Z';
+const DEFAULT_DICE_MODELS = [
+  {
+    id: 'dice-model-default',
+    key: 'default',
+    name: 'Default Dice Box',
+    description: 'The bundled Dice Box theme served with the app.',
+    asset_path: '/assets/',
+    theme: 'default',
+    theme_color: null,
+    external_theme_url: null,
+    config_json: JSON.stringify({
+      scale: 5.5,
+      gravity: 1.1,
+      throwForce: 6.2,
+      spinForce: 7.4,
+      startingHeight: 10,
+      settleTimeout: 4200,
+    }),
+    is_default: 1,
+    sort_order: 0,
+    is_enabled: 1,
+    created_at: DEFAULT_DICE_MODEL_TIMESTAMP,
+    updated_at: DEFAULT_DICE_MODEL_TIMESTAMP,
+  },
+];
 
 const SQLITE_APP_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS users (
@@ -53,6 +79,25 @@ CREATE TABLE IF NOT EXISTS characters (
 
 CREATE INDEX IF NOT EXISTS idx_characters_owner_user_id ON characters (owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_characters_updated_at ON characters (updated_at);
+
+CREATE TABLE IF NOT EXISTS dice_models (
+  id TEXT PRIMARY KEY,
+  key TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  description TEXT,
+  asset_path TEXT NOT NULL,
+  theme TEXT NOT NULL,
+  theme_color TEXT,
+  external_theme_url TEXT,
+  config_json TEXT NOT NULL,
+  is_default INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_dice_models_enabled_sort ON dice_models (is_enabled, sort_order, name);
 `;
 
 const AZURE_SQL_APP_SCHEMA_SQL = `
@@ -125,6 +170,36 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_characters_updated_at
 BEGIN
   CREATE INDEX [idx_characters_updated_at] ON dbo.[characters] ([updated_at]);
 END;
+
+IF OBJECT_ID('dbo.[dice_models]', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.[dice_models] (
+    [id] nvarchar(64) NOT NULL PRIMARY KEY,
+    [key] nvarchar(64) NOT NULL,
+    [name] nvarchar(255) NOT NULL,
+    [description] nvarchar(1000) NULL,
+    [asset_path] nvarchar(512) NOT NULL,
+    [theme] nvarchar(128) NOT NULL,
+    [theme_color] nvarchar(32) NULL,
+    [external_theme_url] nvarchar(1024) NULL,
+    [config_json] nvarchar(max) NOT NULL,
+    [is_default] bit NOT NULL CONSTRAINT [df_dice_models_is_default] DEFAULT 0,
+    [sort_order] int NOT NULL CONSTRAINT [df_dice_models_sort_order] DEFAULT 0,
+    [is_enabled] bit NOT NULL CONSTRAINT [df_dice_models_is_enabled] DEFAULT 1,
+    [created_at] datetimeoffset(7) NOT NULL,
+    [updated_at] datetimeoffset(7) NOT NULL
+  );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ux_dice_models_key' AND object_id = OBJECT_ID('dbo.[dice_models]'))
+BEGIN
+  CREATE UNIQUE INDEX [ux_dice_models_key] ON dbo.[dice_models] ([key]);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_dice_models_enabled_sort' AND object_id = OBJECT_ID('dbo.[dice_models]'))
+BEGIN
+  CREATE INDEX [idx_dice_models_enabled_sort] ON dbo.[dice_models] ([is_enabled], [sort_order], [name]);
+END;
 `;
 
 const ensuredProviders = new Map();
@@ -148,6 +223,10 @@ function parseJson(value, fallback = null) {
   } catch {
     return fallback;
   }
+}
+
+function toBoolean(value) {
+  return value === true || value === 1 || value === '1' || value === 'true';
 }
 
 function sanitizeUser(row) {
@@ -183,6 +262,25 @@ function mapSource(row) {
     id: row.id,
     code: row.code,
     name: row.name,
+  };
+}
+
+function mapDiceModel(row) {
+  return {
+    id: row.id,
+    key: row.key,
+    name: row.name,
+    description: row.description || '',
+    assetPath: row.asset_path || row.assetPath || '/assets/',
+    theme: row.theme || 'default',
+    themeColor: row.theme_color || row.themeColor || null,
+    externalThemeUrl: row.external_theme_url || row.externalThemeUrl || null,
+    config: typeof row.config_json === 'string' ? parseJson(row.config_json, {}) : row.config_json || row.config || {},
+    isDefault: toBoolean(row.is_default ?? row.isDefault),
+    sortOrder: Number(row.sort_order ?? row.sortOrder ?? 0),
+    isEnabled: toBoolean(row.is_enabled ?? row.isEnabled ?? true),
+    createdAt: row.created_at || row.createdAt || null,
+    updatedAt: row.updated_at || row.updatedAt || null,
   };
 }
 
@@ -234,6 +332,21 @@ function sortRowsByText(rows, key) {
   return [...rows].sort((left, right) => compareTextValues(left?.[key], right?.[key]));
 }
 
+function sortDiceModels(rows) {
+  return [...rows].sort((left, right) => {
+    const orderDelta = Number(left?.sort_order ?? left?.sortOrder ?? 0) - Number(right?.sort_order ?? right?.sortOrder ?? 0);
+    if (orderDelta !== 0) {
+      return orderDelta;
+    }
+
+    if (toBoolean(left?.is_default ?? left?.isDefault) !== toBoolean(right?.is_default ?? right?.isDefault)) {
+      return toBoolean(left?.is_default ?? left?.isDefault) ? -1 : 1;
+    }
+
+    return compareTextValues(left?.name, right?.name);
+  });
+}
+
 function sortRowsByDate(rows, key, direction = 'asc') {
   const multiplier = direction === 'desc' ? -1 : 1;
   return [...rows].sort((left, right) => {
@@ -241,6 +354,82 @@ function sortRowsByDate(rows, key, direction = 'asc') {
     const rightValue = Date.parse(right?.[key] || 0);
     return (leftValue - rightValue) * multiplier;
   });
+}
+
+async function ensureDefaultDiceModels() {
+  switch (getProvider()) {
+    case DATABASE_PROVIDERS.AZURE_SQL: {
+      const pool = await getAzurePool();
+      for (const model of DEFAULT_DICE_MODELS) {
+        const request = pool.request();
+        request.input('id', sql.NVarChar(64), model.id);
+        request.input('key', sql.NVarChar(64), model.key);
+        request.input('name', sql.NVarChar(255), model.name);
+        request.input('description', sql.NVarChar(1000), model.description);
+        request.input('asset_path', sql.NVarChar(512), model.asset_path);
+        request.input('theme', sql.NVarChar(128), model.theme);
+        request.input('theme_color', sql.NVarChar(32), model.theme_color);
+        request.input('external_theme_url', sql.NVarChar(1024), model.external_theme_url);
+        request.input('config_json', sql.NVarChar(sql.MAX), model.config_json);
+        request.input('is_default', sql.Bit, model.is_default);
+        request.input('sort_order', sql.Int, model.sort_order);
+        request.input('is_enabled', sql.Bit, model.is_enabled);
+        request.input('created_at', sql.DateTimeOffset, model.created_at);
+        request.input('updated_at', sql.DateTimeOffset, model.updated_at);
+        await request.query(
+          `IF NOT EXISTS (SELECT 1 FROM dbo.[dice_models] WHERE [key] = @key)
+           BEGIN
+             INSERT INTO dbo.[dice_models] ([id], [key], [name], [description], [asset_path], [theme], [theme_color], [external_theme_url], [config_json], [is_default], [sort_order], [is_enabled], [created_at], [updated_at])
+             VALUES (@id, @key, @name, @description, @asset_path, @theme, @theme_color, @external_theme_url, @config_json, @is_default, @sort_order, @is_enabled, @created_at, @updated_at)
+           END`
+        );
+      }
+      break;
+    }
+    case DATABASE_PROVIDERS.MONGODB: {
+      const db = await getMongoDb();
+      await db.collection('dice_models').createIndex({ key: 1 }, { unique: true });
+      await db.collection('dice_models').createIndex({ is_enabled: 1, sort_order: 1, name: 1 });
+      for (const model of DEFAULT_DICE_MODELS) {
+        await db.collection('dice_models').updateOne(
+          { key: model.key },
+          {
+            $setOnInsert: {
+              _id: model.id,
+              ...model,
+            },
+          },
+          { upsert: true }
+        );
+      }
+      break;
+    }
+    default:
+      withSqlite((db) => {
+        const statement = db.prepare(
+          `INSERT OR IGNORE INTO dice_models (id, key, name, description, asset_path, theme, theme_color, external_theme_url, config_json, is_default, sort_order, is_enabled, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        );
+        for (const model of DEFAULT_DICE_MODELS) {
+          statement.run(
+            model.id,
+            model.key,
+            model.name,
+            model.description,
+            model.asset_path,
+            model.theme,
+            model.theme_color,
+            model.external_theme_url,
+            model.config_json,
+            model.is_default,
+            model.sort_order,
+            model.is_enabled,
+            model.created_at,
+            model.updated_at
+          );
+        }
+      });
+  }
 }
 
 async function ensureAppStorage() {
@@ -270,6 +459,8 @@ async function ensureAppStorage() {
               db.exec(SQLITE_APP_SCHEMA_SQL);
             });
         }
+
+        await ensureDefaultDiceModels();
       })().catch((error) => {
         ensuredProviders.delete(provider);
         throw error;
@@ -302,6 +493,65 @@ async function listSources() {
     default:
       return withSqlite((db) =>
         db.prepare('SELECT id, code, name FROM sources ORDER BY code').all().map(mapSource)
+      );
+  }
+}
+
+async function listDiceModels() {
+  await ensureAppStorage();
+
+  switch (getProvider()) {
+    case DATABASE_PROVIDERS.AZURE_SQL: {
+      const pool = await getAzurePool();
+      const result = await pool.request().query(
+        `SELECT [id], [key], [name], [description], [asset_path], [theme], [theme_color], [external_theme_url], [config_json], [is_default], [sort_order], [is_enabled], [created_at], [updated_at]
+         FROM dbo.[dice_models]
+         WHERE [is_enabled] = 1
+         ORDER BY [sort_order], [name]`
+      );
+      return sortDiceModels(result.recordset).map(mapDiceModel);
+    }
+    case DATABASE_PROVIDERS.MONGODB: {
+      const db = await getMongoDb();
+      const rows = await db
+        .collection('dice_models')
+        .find(
+          { is_enabled: { $ne: false } },
+          {
+            projection: {
+              _id: 0,
+              id: 1,
+              key: 1,
+              name: 1,
+              description: 1,
+              asset_path: 1,
+              theme: 1,
+              theme_color: 1,
+              external_theme_url: 1,
+              config_json: 1,
+              is_default: 1,
+              sort_order: 1,
+              is_enabled: 1,
+              created_at: 1,
+              updated_at: 1,
+            },
+          }
+        )
+        .toArray();
+      return sortDiceModels(rows).map(mapDiceModel);
+    }
+    default:
+      return withSqlite((db) =>
+        sortDiceModels(
+          db
+            .prepare(
+              `SELECT id, key, name, description, asset_path, theme, theme_color, external_theme_url, config_json, is_default, sort_order, is_enabled, created_at, updated_at
+               FROM dice_models
+               WHERE is_enabled = 1
+               ORDER BY sort_order, name`
+            )
+            .all()
+        ).map(mapDiceModel)
       );
   }
 }
@@ -1208,6 +1458,7 @@ module.exports = {
   getSessionWithUser,
   isGlobalCharacterAccess,
   listCharacters,
+  listDiceModels,
   listSources,
   listUsers,
   normalizeEdition,
