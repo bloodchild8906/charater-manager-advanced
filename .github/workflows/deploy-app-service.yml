@@ -62,7 +62,9 @@ jobs:
           mkdir -p deploy-package
           cp package.json deploy-package/package.json
           cp package-lock.json deploy-package/package-lock.json
+          if [ -f .npmrc ]; then cp .npmrc deploy-package/.npmrc; fi
           cp -R app deploy-package/app
+          cp -R data deploy-package/data
 
       - name: Upload deploy package
         uses: actions/upload-artifact@v4

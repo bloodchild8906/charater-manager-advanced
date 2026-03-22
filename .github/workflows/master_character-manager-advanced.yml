@@ -53,11 +53,20 @@ jobs:
           fi
           npm run db:seed:online
 
+      - name: Create deploy package
+        run: |
+          mkdir -p deploy-package
+          cp package.json deploy-package/package.json
+          cp package-lock.json deploy-package/package-lock.json
+          if [ -f .npmrc ]; then cp .npmrc deploy-package/.npmrc; fi
+          cp -R app deploy-package/app
+          cp -R data deploy-package/data
+
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: .
+          path: deploy-package
 
   deploy:
     runs-on: ubuntu-latest
@@ -68,6 +77,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
+          path: deploy-package
       
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
@@ -75,5 +85,5 @@ jobs:
         with:
           app-name: 'character-manager-advanced'
           slot-name: 'Production'
-          package: .
+          package: deploy-package
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_98F2C7ADEDE141C39758DEB5B1FFD30D }}

@@ -1,3 +1,7 @@
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
 const ORIGINAL_ENV = { ...process.env };
 
 function restoreEnv() {
@@ -95,5 +99,31 @@ describe('mongo database naming', () => {
         'mongodb+srv://user:pass@cluster.example.com/character-manager-advanced-database?retryWrites=true&w=majority'
       )
     ).toBe('character-manager-advanced-database');
+  });
+});
+
+describe('sqlite path selection', () => {
+  it('uses App Service writable storage and seeds it from the bundled database', () => {
+    const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), '5e-database-'));
+
+    try {
+      const database = loadDatabaseModule({
+        WEBSITE_SITE_NAME: 'character-manager-advanced',
+        HOME: tempHome,
+      });
+
+      const sqlitePath = database.getSqlitePath();
+      expect(sqlitePath).toBe(path.join(tempHome, 'site', 'data', '5e-database.sqlite'));
+      expect(fs.existsSync(sqlitePath)).toBe(false);
+
+      const db = database.openSqliteDatabase();
+      const row = db.prepare('SELECT COUNT(*) AS count FROM sources').get();
+      db.close();
+
+      expect(Number(row.count)).toBeGreaterThan(0);
+      expect(fs.existsSync(sqlitePath)).toBe(true);
+    } finally {
+      fs.rmSync(tempHome, { recursive: true, force: true });
+    }
   });
 });

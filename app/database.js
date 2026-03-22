@@ -1,9 +1,11 @@
+const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 
 const DEFAULT_AZURE_SQL_DATABASE = 'dnd5e_srd_minimal';
 const DEFAULT_MONGODB_DATABASE = '5e-database';
 const DEFAULT_AZURE_COSMOS_SCOPE = 'https://management.azure.com/.default';
+const DEFAULT_SQLITE_RELATIVE_PATH = path.join('data', '5e-database.sqlite');
 
 const DATABASE_PROVIDERS = {
   SQLITE: 'sqlite',
@@ -132,11 +134,41 @@ async function getAzureSqlCounts() {
 }
 
 function getSqlitePath() {
-  return path.resolve(process.env.SQLITE_DB_PATH || 'data/5e-database.sqlite');
+  const explicitSqlitePath = readEnv('SQLITE_DB_PATH');
+  if (explicitSqlitePath) {
+    return path.resolve(explicitSqlitePath);
+  }
+
+  if (readEnv('WEBSITE_SITE_NAME') || readEnv('WEBSITE_INSTANCE_ID')) {
+    const appServiceHome = readEnv('HOME');
+    if (appServiceHome) {
+      return path.resolve(appServiceHome, 'site', 'data', '5e-database.sqlite');
+    }
+  }
+
+  return path.resolve(DEFAULT_SQLITE_RELATIVE_PATH);
+}
+
+function ensureSqliteDatabaseFile() {
+  const sqlitePath = getSqlitePath();
+  const bundledSqlitePath = path.resolve(DEFAULT_SQLITE_RELATIVE_PATH);
+
+  fs.mkdirSync(path.dirname(sqlitePath), { recursive: true });
+
+  if (fs.existsSync(sqlitePath)) {
+    return sqlitePath;
+  }
+
+  if (!fs.existsSync(bundledSqlitePath)) {
+    throw new Error(`SQLite database not found at ${bundledSqlitePath}.`);
+  }
+
+  fs.copyFileSync(bundledSqlitePath, sqlitePath);
+  return sqlitePath;
 }
 
 function openSqliteDatabase() {
-  const db = new DatabaseSync(getSqlitePath());
+  const db = new DatabaseSync(ensureSqliteDatabaseFile());
   db.exec('PRAGMA foreign_keys = ON');
   return db;
 }
