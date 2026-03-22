@@ -9,8 +9,8 @@
   "scripts": {
     "start": "node --experimental-sqlite app/server.js",
     "lint": "eslint . --config eslint.config.mjs",
-    "test": "vitest run",
-    "coverage": "vitest run --coverage",
+    "test": "node ./node_modules/vitest/vitest.mjs run",
+    "coverage": "node ./node_modules/vitest/vitest.mjs run --coverage",
     "build:ts": "tsc --project scripts",
     "db:refresh": "npm run build:ts && node --experimental-sqlite scripts/built/dbRefresh.js",
     "db:seed": "npm run build:ts && node --experimental-sqlite scripts/built/dbSeed.js",

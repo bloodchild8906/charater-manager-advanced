@@ -1,9 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.seedSqliteDatabase = seedSqliteDatabase;
+exports.main = main;
 const dbUtils_1 = require("./dbUtils");
 const normalizedSchema_1 = require("./normalizedSchema");
 const seedNormalizedDatabase_1 = require("./seedNormalizedDatabase");
-function main() {
+function seedSqliteDatabase() {
     const sqliteDbPath = (0, dbUtils_1.getSqliteDbPath)();
     (0, dbUtils_1.resetSqliteDatabase)(sqliteDbPath);
     const db = (0, dbUtils_1.openSqliteDatabase)(sqliteDbPath);
@@ -21,4 +23,9 @@ function main() {
         db.close();
     }
 }
-main();
+function main() {
+    seedSqliteDatabase();
+}
+if (require.main === module) {
+    main();
+}

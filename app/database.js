@@ -117,19 +117,31 @@ function getSqlitePath() {
   return path.resolve(process.env.SQLITE_DB_PATH || 'data/5e-database.sqlite');
 }
 
-function getSqliteCounts() {
+function openSqliteDatabase() {
   const db = new DatabaseSync(getSqlitePath());
-  const counts = {};
+  db.exec('PRAGMA foreign_keys = ON');
+  return db;
+}
+
+function withSqlite(action) {
+  const db = openSqliteDatabase();
 
   try {
+    return action(db);
+  } finally {
+    db.close();
+  }
+}
+
+function getSqliteCounts() {
+  return withSqlite((db) => {
+    const counts = {};
     for (const table of TABLES) {
       const result = db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get();
       counts[table] = Number(result.count);
     }
     return counts;
-  } finally {
-    db.close();
-  }
+  });
 }
 
 function deriveMongoDatabaseNameFromConnectionString(connectionString) {
@@ -229,9 +241,13 @@ async function getMongoClient() {
   return mongoClientPromise;
 }
 
-async function getMongoCounts() {
+async function getMongoDb() {
   const client = await getMongoClient();
-  const db = client.db(getMongoDatabaseName());
+  return client.db(getMongoDatabaseName());
+}
+
+async function getMongoCounts() {
+  const db = await getMongoDb();
   const counts = {};
 
   for (const table of TABLES) {
@@ -270,13 +286,19 @@ module.exports = {
   SUPPORTED_DATABASE_PROVIDERS,
   TABLES,
   deriveMongoDatabaseNameFromConnectionString,
+  getAzurePool,
   getAzureSqlConfig,
   getConfiguredProvider,
   getCounts,
   getDatabaseTarget,
+  getMongoClient,
   getMongoDatabaseName,
+  getMongoDb,
   getProvider,
   getSqlitePath,
   hasAzureSqlConfig,
   hasMongoDbConfig,
+  openSqliteDatabase,
+  readEnv,
+  withSqlite,
 };
