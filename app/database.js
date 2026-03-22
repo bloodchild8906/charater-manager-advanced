@@ -1,7 +1,5 @@
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
-const sql = require('mssql');
-const { MongoClient } = require('mongodb');
 
 const DEFAULT_AZURE_SQL_DATABASE = 'dnd5e_srd_minimal';
 const DEFAULT_MONGODB_DATABASE = '5e-database';
@@ -15,6 +13,25 @@ const DATABASE_PROVIDERS = {
 
 const TABLES = ['sources', 'lookups', 'entities', 'features', 'spells', 'items', 'actors', 'links'];
 const SUPPORTED_DATABASE_PROVIDERS = Object.values(DATABASE_PROVIDERS);
+
+let sqlModule = null;
+let MongoClientClass = null;
+
+function getSqlModule() {
+  if (!sqlModule) {
+    sqlModule = require('mssql');
+  }
+
+  return sqlModule;
+}
+
+function getMongoClientClass() {
+  if (!MongoClientClass) {
+    ({ MongoClient: MongoClientClass } = require('mongodb'));
+  }
+
+  return MongoClientClass;
+}
 
 function readEnv(name) {
   return String(process.env[name] || '').trim();
@@ -94,6 +111,7 @@ let azurePoolPromise = null;
 
 async function getAzurePool() {
   if (!azurePoolPromise) {
+    const sql = getSqlModule();
     const pool = new sql.ConnectionPool(getAzureSqlConfig());
     azurePoolPromise = pool.connect();
   }
@@ -232,6 +250,7 @@ async function getMongoClient() {
   if (!mongoClientPromise) {
     mongoClientPromise = (async () => {
       const connectionString = await getMongoConnectionString();
+      const MongoClient = getMongoClientClass();
       const client = new MongoClient(connectionString);
       await client.connect();
       return client;
