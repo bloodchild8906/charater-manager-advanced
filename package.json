@@ -4,7 +4,7 @@
   "description": "Database for 5e-srd-api",
   "private": true,
   "engines": {
-    "node": "22.x"
+    "node": ">=22 <25"
   },
   "scripts": {
     "start": "node --experimental-sqlite app/server.js",
@@ -15,6 +15,8 @@
     "db:refresh": "npm run build:ts && node --experimental-sqlite scripts/built/dbRefresh.js",
     "db:seed": "npm run build:ts && node --experimental-sqlite scripts/built/dbSeed.js",
     "db:seed:azure": "npm run build:ts && node scripts/built/dbSeedAzureSql.js",
+    "db:seed:mongodb": "npm run build:ts && node scripts/built/dbSeedMongo.js",
+    "db:seed:online": "npm run build:ts && node scripts/built/dbSeedOnline.js",
     "db:update": "npm run build:ts && node --experimental-sqlite scripts/built/dbUpdate.js"
   },
   "repository": {
@@ -43,13 +45,14 @@
     "glob": "^13.0.6",
     "globals": "^17.4.0",
     "jsdom": "^29.0.0",
-    "mongodb": "^7.1.0",
     "redis": "^5.11.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.3"
   },
   "dependencies": {
+    "@azure/identity": "^4.13.0",
     "@types/sql.js": "^1.4.10",
+    "mongodb": "^7.1.0",
     "mssql": "^11.0.1",
     "sql.js": "^1.14.1"
   }

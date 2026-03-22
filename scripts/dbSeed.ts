@@ -2,7 +2,7 @@ import { getSqliteDbPath, openSqliteDatabase, resetSqliteDatabase } from './dbUt
 import { createNormalizedSchema } from './normalizedSchema';
 import { seedNormalizedDatabase } from './seedNormalizedDatabase';
 
-function main() {
+export function seedSqliteDatabase() {
   const sqliteDbPath = getSqliteDbPath();
   resetSqliteDatabase(sqliteDbPath);
   const db = openSqliteDatabase(sqliteDbPath);
@@ -20,4 +20,10 @@ function main() {
   }
 }
 
-main();
+export function main() {
+  seedSqliteDatabase();
+}
+
+if (require.main === module) {
+  main();
+}

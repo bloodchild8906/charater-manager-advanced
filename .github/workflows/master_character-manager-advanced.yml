@@ -26,8 +26,32 @@ jobs:
       - name: npm install, build, and test
         run: |
           npm install
+          npm run build:ts
           npm run build --if-present
           npm run test --if-present
+
+      - name: Seed selected database
+        shell: bash
+        env:
+          DATABASE_PROVIDER: ${{ vars.DATABASE_PROVIDER }}
+          AZURE_SQL_SERVER: ${{ secrets.AZURE_SQL_SERVER }}
+          AZURE_SQL_USERNAME: ${{ secrets.AZURE_SQL_USERNAME }}
+          AZURE_SQL_PASSWORD: ${{ secrets.AZURE_SQL_PASSWORD }}
+          AZURE_SQL_DATABASE: ${{ secrets.AZURE_SQL_DATABASE }}
+          MONGODB_DATABASE: ${{ vars.MONGODB_DATABASE }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          AZURE_COSMOS_CONNECTIONSTRING: ${{ secrets.AZURE_COSMOS_CONNECTIONSTRING }}
+          AZURE_COSMOS_LISTCONNECTIONSTRINGURL: ${{ secrets.AZURE_COSMOS_LISTCONNECTIONSTRINGURL }}
+          AZURE_COSMOS_SCOPE: ${{ vars.AZURE_COSMOS_SCOPE }}
+          AZURE_COSMOS_CLIENTID: ${{ secrets.AZURE_COSMOS_CLIENTID }}
+          AZURE_COSMOS_CLIENTSECRET: ${{ secrets.AZURE_COSMOS_CLIENTSECRET }}
+          AZURE_COSMOS_TENANTID: ${{ secrets.AZURE_COSMOS_TENANTID }}
+        run: |
+          if [ -z "${DATABASE_PROVIDER}${AZURE_SQL_SERVER}${MONGODB_URI}${AZURE_COSMOS_CONNECTIONSTRING}${AZURE_COSMOS_LISTCONNECTIONSTRINGURL}" ]; then
+            echo "Skipping remote seed because no online database settings were configured for GitHub Actions."
+            exit 0
+          fi
+          npm run db:seed:online
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4

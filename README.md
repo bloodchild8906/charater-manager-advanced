@@ -9,9 +9,17 @@ Talk to us [on Discord!](https://discord.gg/TQuYTv7)
 
 ## How to run
 
-This project writes the SRD data into a normalized SQLite database.
+This project writes the SRD data into a normalized SQLite database and can also seed or read from Azure SQL and MongoDB.
 
 By default the database is written to `data/5e-database.sqlite`.
+
+The runtime database provider is controlled by `DATABASE_PROVIDER`:
+
+- `sqlite`
+- `azuresql`
+- `mongodb`
+
+If `DATABASE_PROVIDER` is not set, the app keeps the existing fallback behavior and auto-detects Azure SQL first, then MongoDB, then SQLite.
 
 The schema uses these core tables:
 
@@ -66,7 +74,29 @@ AZURE_SQL_DATABASE=dnd5e_srd_minimal \
 npm run db:seed:azure
 ```
 
-When `AZURE_SQL_SERVER`, `AZURE_SQL_USERNAME`, and `AZURE_SQL_PASSWORD` are present, the runtime app automatically uses Azure SQL instead of SQLite.
+To seed MongoDB:
+
+```bash
+DATABASE_PROVIDER=mongodb \
+MONGODB_DATABASE=character-manager-advanced-database \
+MONGODB_URI='mongodb://...' \
+npm run db:seed:mongodb
+```
+
+If your Azure App Service uses Azure Service Connector for Cosmos DB for MongoDB, the app also supports the Service Connector environment variables:
+
+- `AZURE_COSMOS_CONNECTIONSTRING`
+- `AZURE_COSMOS_LISTCONNECTIONSTRINGURL`
+- `AZURE_COSMOS_SCOPE`
+- `AZURE_COSMOS_CLIENTID`
+- `AZURE_COSMOS_CLIENTSECRET`
+- `AZURE_COSMOS_TENANTID`
+
+To seed whichever online provider is selected by `DATABASE_PROVIDER`:
+
+```bash
+npm run db:seed:online
+```
 
 ## Deployment
 
@@ -77,20 +107,32 @@ What the workflow does:
 - installs dependencies
 - builds the TypeScript seed scripts
 - runs the test suite
-- reseeds the live Azure SQL database
+- reseeds the selected online database when matching credentials are available
 - deploys the Node runtime app to Azure App Service
 
 Required GitHub Secrets:
 
 - `AZURE_CREDENTIALS`
+
+Azure SQL deployment inputs:
+
 - `AZURE_SQL_SERVER`
 - `AZURE_SQL_USERNAME`
 - `AZURE_SQL_PASSWORD`
 - `AZURE_SQL_DATABASE` (optional, defaults in code to `dnd5e_srd_minimal`)
 
+MongoDB deployment inputs:
+
+- `MONGODB_URI` or `AZURE_COSMOS_CONNECTIONSTRING`, or the Azure Service Connector identity variables
+- `MONGODB_DATABASE`
+
 Required GitHub Variables:
 
 - `AZURE_WEBAPP_NAME`
+- `DATABASE_PROVIDER`
+- `MONGODB_DATABASE` when `DATABASE_PROVIDER=mongodb`
+
+For your Azure App Service, set `DATABASE_PROVIDER=mongodb` and `MONGODB_DATABASE=character-manager-advanced-database`. If you already attached the app to Azure Cosmos DB for MongoDB with Service Connector, the runtime can use the connector-provided variables directly.
 
 The deployed app exposes:
 

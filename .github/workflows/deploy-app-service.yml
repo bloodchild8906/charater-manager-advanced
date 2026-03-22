@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: '22'
+  NODE_VERSION: '24'
 
 jobs:
   build-test-seed:
@@ -34,13 +34,28 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Seed Azure SQL
+      - name: Seed selected database
+        shell: bash
         env:
+          DATABASE_PROVIDER: ${{ vars.DATABASE_PROVIDER }}
           AZURE_SQL_SERVER: ${{ secrets.AZURE_SQL_SERVER }}
           AZURE_SQL_USERNAME: ${{ secrets.AZURE_SQL_USERNAME }}
           AZURE_SQL_PASSWORD: ${{ secrets.AZURE_SQL_PASSWORD }}
           AZURE_SQL_DATABASE: ${{ secrets.AZURE_SQL_DATABASE }}
-        run: npm run db:seed:azure
+          MONGODB_DATABASE: ${{ vars.MONGODB_DATABASE }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          AZURE_COSMOS_CONNECTIONSTRING: ${{ secrets.AZURE_COSMOS_CONNECTIONSTRING }}
+          AZURE_COSMOS_LISTCONNECTIONSTRINGURL: ${{ secrets.AZURE_COSMOS_LISTCONNECTIONSTRINGURL }}
+          AZURE_COSMOS_SCOPE: ${{ vars.AZURE_COSMOS_SCOPE }}
+          AZURE_COSMOS_CLIENTID: ${{ secrets.AZURE_COSMOS_CLIENTID }}
+          AZURE_COSMOS_CLIENTSECRET: ${{ secrets.AZURE_COSMOS_CLIENTSECRET }}
+          AZURE_COSMOS_TENANTID: ${{ secrets.AZURE_COSMOS_TENANTID }}
+        run: |
+          if [ -z "${DATABASE_PROVIDER}${AZURE_SQL_SERVER}${MONGODB_URI}${AZURE_COSMOS_CONNECTIONSTRING}${AZURE_COSMOS_LISTCONNECTIONSTRINGURL}" ]; then
+            echo "Skipping remote seed because no online database settings were configured for GitHub Actions."
+            exit 0
+          fi
+          npm run db:seed:online
 
       - name: Create deploy package
         run: |
@@ -71,20 +86,45 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Build App Service settings payload
+        id: build-app-settings
+        shell: bash
+        env:
+          DATABASE_PROVIDER: ${{ vars.DATABASE_PROVIDER }}
+          MONGODB_DATABASE: ${{ vars.MONGODB_DATABASE }}
+          AZURE_SQL_SERVER: ${{ secrets.AZURE_SQL_SERVER }}
+          AZURE_SQL_USERNAME: ${{ secrets.AZURE_SQL_USERNAME }}
+          AZURE_SQL_PASSWORD: ${{ secrets.AZURE_SQL_PASSWORD }}
+          AZURE_SQL_DATABASE: ${{ secrets.AZURE_SQL_DATABASE }}
+        run: |
+          node <<'EOF' >> "$GITHUB_OUTPUT"
+          const settings = [
+            { name: 'WEBSITE_NODE_DEFAULT_VERSION', value: '~24', slotSetting: false },
+            { name: 'NODE_ENV', value: 'production', slotSetting: false },
+            { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'true', slotSetting: false },
+            { name: 'ENABLE_ORYX_BUILD', value: 'true', slotSetting: false },
+          ];
+          const optionalSettings = [
+            ['DATABASE_PROVIDER', process.env.DATABASE_PROVIDER],
+            ['MONGODB_DATABASE', process.env.MONGODB_DATABASE],
+            ['AZURE_SQL_SERVER', process.env.AZURE_SQL_SERVER],
+            ['AZURE_SQL_USERNAME', process.env.AZURE_SQL_USERNAME],
+            ['AZURE_SQL_PASSWORD', process.env.AZURE_SQL_PASSWORD],
+            ['AZURE_SQL_DATABASE', process.env.AZURE_SQL_DATABASE],
+          ];
+          for (const [name, value] of optionalSettings) {
+            if (value && value.trim()) {
+              settings.push({ name, value: value.trim(), slotSetting: false });
+            }
+          }
+          process.stdout.write(`app_settings_json<<JSON\n${JSON.stringify(settings)}\nJSON\n`);
+          EOF
+
       - name: Configure App Service settings
         uses: azure/appservice-settings@v1
         with:
           app-name: ${{ vars.AZURE_WEBAPP_NAME }}
-          app-settings-json: >-
-            [
-              { "name": "WEBSITE_NODE_DEFAULT_VERSION", "value": "~22", "slotSetting": false },
-              { "name": "NODE_ENV", "value": "production", "slotSetting": false },
-              { "name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "true", "slotSetting": false },
-              { "name": "ENABLE_ORYX_BUILD", "value": "true", "slotSetting": false },
-              { "name": "AZURE_SQL_SERVER", "value": "${{ secrets.AZURE_SQL_SERVER }}", "slotSetting": false },
-              { "name": "AZURE_SQL_USERNAME", "value": "${{ secrets.AZURE_SQL_USERNAME }}", "slotSetting": false },
-              { "name": "AZURE_SQL_PASSWORD", "value": "${{ secrets.AZURE_SQL_PASSWORD }}", "slotSetting": false }
-            ]
+          app-settings-json: ${{ steps.build-app-settings.outputs.app_settings_json }}
 
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3

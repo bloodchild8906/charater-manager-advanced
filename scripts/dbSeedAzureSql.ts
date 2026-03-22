@@ -386,7 +386,7 @@ async function insertRows(
   }
 }
 
-async function main() {
+export async function seedAzureSqlDatabase() {
   const config = getAzureSqlConfig();
   const data = buildNormalizedSeedData();
   const pool = new sql.ConnectionPool(config);
@@ -425,4 +425,13 @@ async function main() {
   }
 }
 
-main();
+export async function main() {
+  await seedAzureSqlDatabase();
+}
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error('Azure SQL seed failed:', error);
+    process.exit(1);
+  });
+}
