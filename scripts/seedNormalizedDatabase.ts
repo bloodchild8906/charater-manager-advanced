@@ -1360,7 +1360,8 @@ function seedEntities(
         slug: `2014-ancestry-${record.index}`,
         code: record.index,
         name: record.name,
-        size_lookup_id: ctx.getLookupId('size', lookupCodeFromName(record.size)),
+        size_lookup_id:
+          typeof record.size === 'string' ? ctx.getLookupId('size', lookupCodeFromName(record.size)) : null,
         spellcasting_ability_lookup_id: null,
         hit_die: null,
         level_min: null,
@@ -1472,7 +1473,8 @@ function seedEntities(
         slug: `2024-ancestry-${record.index}`,
         code: record.index,
         name: record.name,
-        size_lookup_id: ctx.getLookupId('size', lookupCodeFromName(record.size)),
+        size_lookup_id:
+          typeof record.size === 'string' ? ctx.getLookupId('size', lookupCodeFromName(record.size)) : null,
         spellcasting_ability_lookup_id: null,
         hit_die: null,
         level_min: null,
@@ -1761,7 +1763,8 @@ function seedFeatures(ctx: SeedContext): void {
       'traits'
     );
 
-    (record.species ?? []).forEach((ownerReference: any) => {
+    (Array.isArray(record.species) ? record.species : record.species ? [record.species] : []).forEach(
+      (ownerReference: any) => {
       const ownerId = getReferenceEntityId(ctx, ownerReference);
       if (!ownerId) {
         return;
@@ -1776,7 +1779,8 @@ function seedFeatures(ctx: SeedContext): void {
         rightId: featureId,
         relationshipRole: 'grants',
       });
-    });
+      }
+    );
   });
 
   feats2014.forEach((record) => {

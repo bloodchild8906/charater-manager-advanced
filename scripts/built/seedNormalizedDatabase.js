@@ -1091,7 +1091,7 @@ function seedEntities(ctx, classProgression, subclassProgression) {
             slug: `2014-ancestry-${record.index}`,
             code: record.index,
             name: record.name,
-            size_lookup_id: ctx.getLookupId('size', lookupCodeFromName(record.size)),
+            size_lookup_id: typeof record.size === 'string' ? ctx.getLookupId('size', lookupCodeFromName(record.size)) : null,
             spellcasting_ability_lookup_id: null,
             hit_die: null,
             level_min: null,
@@ -1186,7 +1186,7 @@ function seedEntities(ctx, classProgression, subclassProgression) {
             slug: `2024-ancestry-${record.index}`,
             code: record.index,
             name: record.name,
-            size_lookup_id: ctx.getLookupId('size', lookupCodeFromName(record.size)),
+            size_lookup_id: typeof record.size === 'string' ? ctx.getLookupId('size', lookupCodeFromName(record.size)) : null,
             spellcasting_ability_lookup_id: null,
             hit_die: null,
             level_min: null,
@@ -1403,7 +1403,7 @@ function seedFeatures(ctx) {
         });
     });
     traits2024.forEach((record) => {
-        var _a, _b;
+        var _a;
         const description = textFromDesc((_a = record.description) !== null && _a !== void 0 ? _a : record.desc) || record.name;
         const activationCode = inferActivationCode(description);
         const restCode = inferRestCode(description);
@@ -1427,7 +1427,7 @@ function seedFeatures(ctx) {
             srd: true,
             is_homebrew: false,
         }, 'traits');
-        ((_b = record.species) !== null && _b !== void 0 ? _b : []).forEach((ownerReference) => {
+        (Array.isArray(record.species) ? record.species : record.species ? [record.species] : []).forEach((ownerReference) => {
             const ownerId = getReferenceEntityId(ctx, ownerReference);
             if (!ownerId) {
                 return;
