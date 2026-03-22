@@ -56,6 +56,31 @@ const floatingRoot = ensureFloatingRoot();
 const compendiumRoot = ensureFloatingSurface('compendium-window-root');
 const diceRoot = ensureFloatingSurface('dice-toolbar-root');
 
+function createDefaultDiceState() {
+  return {
+    open: false,
+    hidden: false,
+    count: 1,
+    sides: 20,
+    modifier: 0,
+    formulaInput: describeRollFormula(1, 20, 0),
+    models: [],
+    activeModelKey: null,
+    rolling: false,
+    ready: false,
+    initPending: false,
+    initError: null,
+    rollId: 0,
+    sceneRoll: null,
+    lastRoll: null,
+    history: [],
+    position: {
+      x: null,
+      y: null,
+    },
+  };
+}
+
 const state = {
   authMode: 'login',
   session: null,
@@ -89,27 +114,14 @@ const state = {
   createFlowOpen: false,
   wizard: null,
   sheetEntryModal: null,
-  dice: {
-    open: false,
-    count: 1,
-    sides: 20,
-    modifier: 0,
-    models: [],
-    activeModelKey: null,
-    rolling: false,
-    ready: false,
-    initPending: false,
-    initError: null,
-    rollId: 0,
-    lastRoll: null,
-    history: [],
-  },
+  dice: createDefaultDiceState(),
 };
 
 let diceBoxImportPromise = null;
 let diceBoxInitPromise = null;
 let diceBoxInstance = null;
 let compendiumDragState = null;
+let diceToolbarDragState = null;
 
 function ensureFloatingRoot() {
   let root = document.getElementById('floating-overlay-root');
@@ -303,6 +315,25 @@ function ensureCompendiumPosition() {
   state.compendiumPosition = clampCompendiumPosition({
     x: state.compendiumPosition.x,
     y: state.compendiumPosition.y,
+  });
+}
+
+function clampDiceToolbarPosition(position = state.dice.position) {
+  const width = Math.min(state.dice.open ? 448 : 392, Math.max(288, window.innerWidth - 32));
+  const height = state.dice.open ? 356 : 116;
+  const maxX = Math.max(16, window.innerWidth - width - 16);
+  const maxY = Math.max(16, window.innerHeight - height - 16);
+
+  return {
+    x: clampNumber(position.x, 16, maxX, maxX),
+    y: clampNumber(position.y, 16, maxY, maxY),
+  };
+}
+
+function ensureDiceToolbarPosition() {
+  state.dice.position = clampDiceToolbarPosition({
+    x: state.dice.position.x,
+    y: state.dice.position.y,
   });
 }
 
@@ -682,6 +713,7 @@ function createWizardState(mode, character = null) {
       step: 0,
       characterId: character.id,
       characterName: character.data.name || character.name,
+      detailType: null,
       nextLevel: Math.min(20, Number(character.data.level || 1) + 1),
       hpGain: Math.max(
         1,
@@ -707,6 +739,7 @@ function createWizardState(mode, character = null) {
   return {
     mode: 'create',
     step: 0,
+    detailType: null,
     draft,
     assignedScores: createBlankAbilityAssignments(),
     availableScores: [...STANDARD_ABILITY_ARRAY],
@@ -1004,6 +1037,7 @@ async function advanceWizard() {
   const steps = getWizardSteps();
   if (wizard.step < steps.length - 1) {
     wizard.step += 1;
+    wizard.detailType = null;
     render();
     return;
   }
@@ -1027,21 +1061,46 @@ async function advanceWizard() {
 function setDiceSetting(key, value) {
   if (key === 'count') {
     state.dice.count = clampNumber(value, 1, 6, 1);
+    state.dice.formulaInput = describeRollFormula(state.dice.count, state.dice.sides, state.dice.modifier);
     return;
   }
 
   if (key === 'modifier') {
     state.dice.modifier = clampNumber(value, -50, 50, 0);
+    state.dice.formulaInput = describeRollFormula(state.dice.count, state.dice.sides, state.dice.modifier);
     return;
   }
 
   if (key === 'sides') {
     const numericValue = Number(value);
     state.dice.sides = DIE_OPTIONS.includes(numericValue) ? numericValue : 20;
+    state.dice.formulaInput = describeRollFormula(state.dice.count, state.dice.sides, state.dice.modifier);
   }
 }
 
-function buildDiceRoll(values, formula, modifier = 0, label = '') {
+function describeEntriesFormula(entries, modifier = 0, fallbackFormula = '') {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return fallbackFormula || describeRollFormula(state.dice.count, state.dice.sides, modifier);
+  }
+
+  const grouped = new Map();
+  for (const entry of entries) {
+    const dieType = String(entry?.dieType || entry?.sides || '').trim();
+    if (!dieType) {
+      continue;
+    }
+    grouped.set(dieType, (grouped.get(dieType) || 0) + 1);
+  }
+
+  const diceTerms = [...grouped.entries()].map(([dieType, count]) => `${count}${dieType.startsWith('d') ? dieType : `d${dieType}`}`);
+  if (diceTerms.length === 0) {
+    return fallbackFormula || '';
+  }
+
+  return `${diceTerms.join('+')}${Number(modifier) === 0 ? '' : formatSigned(modifier)}`;
+}
+
+function buildDiceRoll(values, formula, modifier = 0, label = '', entries = []) {
   const subtotal = values.reduce((total, result) => total + result, 0);
   return {
     label,
@@ -1050,16 +1109,73 @@ function buildDiceRoll(values, formula, modifier = 0, label = '') {
     subtotal,
     total: subtotal + modifier,
     formula,
+    entries,
     timestamp: new Date().toISOString(),
   };
 }
 
-function buildDiceRollFromResults(results, formula, modifier = 0, label = '') {
-  const values = (Array.isArray(results) ? results : [])
+function buildDiceRollFromEntries(entries, modifier = 0, label = '', fallbackFormula = '') {
+  const normalizedEntries = Array.isArray(entries) ? entries : [];
+  const values = normalizedEntries
     .map((entry) => Number(entry?.value))
     .filter((value) => Number.isFinite(value));
 
-  return buildDiceRoll(values, formula, modifier, label);
+  return buildDiceRoll(values, describeEntriesFormula(normalizedEntries, modifier, fallbackFormula), modifier, label, normalizedEntries);
+}
+
+function buildDiceRollFromResults(results, formula, modifier = 0, label = '') {
+  return buildDiceRollFromEntries(results, modifier, label, formula);
+}
+
+function getVisibleDiceRoll() {
+  return (
+    state.dice.sceneRoll ||
+    state.dice.lastRoll ||
+    {
+      label: '',
+      total: null,
+      formula: state.dice.formulaInput || describeRollFormula(state.dice.count, state.dice.sides, state.dice.modifier),
+      values: [],
+      entries: [],
+      modifier: state.dice.modifier,
+    }
+  );
+}
+
+function hasActiveDiceScene() {
+  return state.dice.rolling || Boolean(state.dice.sceneRoll?.entries?.length);
+}
+
+async function clearDiceScene() {
+  if (diceBoxInstance) {
+    diceBoxInstance.clear();
+  }
+
+  state.dice.sceneRoll = null;
+  renderFloatingSurfaces();
+}
+
+async function removeDieFromScene(rollId) {
+  const sceneRoll = state.dice.sceneRoll;
+  if (!sceneRoll?.entries?.length || !diceBoxInstance || state.dice.rolling) {
+    return;
+  }
+
+  const targetEntry = rollId == null
+    ? sceneRoll.entries[sceneRoll.entries.length - 1]
+    : sceneRoll.entries.find((entry) => String(entry.rollId) === String(rollId));
+
+  if (!targetEntry) {
+    return;
+  }
+
+  const remainingEntries = sceneRoll.entries.filter((entry) => String(entry.rollId) !== String(targetEntry.rollId));
+  await diceBoxInstance.remove(targetEntry);
+  state.dice.sceneRoll =
+    remainingEntries.length > 0
+      ? buildDiceRollFromEntries(remainingEntries, sceneRoll.modifier, sceneRoll.label, sceneRoll.formula)
+      : null;
+  renderFloatingSurfaces();
 }
 
 function syncDiceModels(models) {
@@ -1177,7 +1293,9 @@ async function rollDice() {
   state.dice.count = count;
   state.dice.sides = sides;
   state.dice.modifier = modifier;
-  await rollDiceFormula(describeRollFormula(count, sides, modifier));
+
+  const formula = String(state.dice.formulaInput || '').trim() || describeRollFormula(count, sides, modifier);
+  await rollDiceFormula(formula);
 }
 
 async function rollDiceFormula(formula, label = '') {
@@ -1186,10 +1304,14 @@ async function rollDiceFormula(formula, label = '') {
     throw new Error('Roll formulas must use standard dice notation such as 1d20+5 or 2d6+3.');
   }
 
+  ensureDiceToolbarPosition();
+  state.dice.hidden = false;
   state.dice.open = true;
   state.dice.rollId += 1;
   state.dice.rolling = true;
   state.dice.initError = null;
+  state.dice.formulaInput = analysis.formula;
+  state.dice.sceneRoll = null;
   renderFloatingSurfaces();
 
   const activeRollId = state.dice.rollId;
@@ -1202,6 +1324,7 @@ async function rollDiceFormula(formula, label = '') {
       return;
     }
 
+    state.dice.sceneRoll = roll;
     state.dice.lastRoll = roll;
     state.dice.history = [roll, ...state.dice.history].slice(0, 5);
   } catch (error) {
@@ -1349,21 +1472,7 @@ async function logout() {
   state.createFlowOpen = false;
   state.wizard = null;
   state.sheetEntryModal = null;
-  state.dice = {
-    open: false,
-    count: 1,
-    sides: 20,
-    modifier: 0,
-    models: [],
-    activeModelKey: null,
-    rolling: false,
-    ready: false,
-    initPending: false,
-    initError: null,
-    rollId: 0,
-    lastRoll: null,
-    history: [],
-  };
+  state.dice = createDefaultDiceState();
   diceBoxInstance = null;
   diceBoxInitPromise = null;
   setMessage('success', 'Signed out.');
@@ -2692,42 +2801,104 @@ function getSelectedCompendiumResult() {
   return state.compendiumResults[state.compendiumDetailIndex] || null;
 }
 
-function renderDiceSummary() {
-  const activeRoll = state.dice.lastRoll || {
-    label: '',
-    total: null,
-    formula: describeRollFormula(state.dice.count, state.dice.sides, state.dice.modifier),
-    values: [],
-    modifier: state.dice.modifier,
-  };
-  const activeModel = getActiveDiceModel();
+function renderDiceResultChips(roll) {
+  if (!roll?.entries?.length) {
+    return '';
+  }
+
+  const canRemove = state.dice.sceneRoll === roll;
 
   return `
-    <div class="muted">${escapeHtml(activeModel?.name || 'No dice model')}</div>
-    ${activeRoll.label ? `<div class="dice-stage__label">${escapeHtml(activeRoll.label)}</div>` : ''}
-    <div class="dice-stage__formula">${escapeHtml(activeRoll.formula)}</div>
-    <div class="dice-stage__total">${escapeHtml(activeRoll.total == null ? '--' : String(activeRoll.total))}</div>
-    <div class="muted">
-      ${
-        state.dice.initError
-          ? escapeHtml(state.dice.initError)
-          : state.dice.rolling
-            ? 'Rolling through Dice Box...'
-            : state.dice.lastRoll
-              ? `Individual dice: ${escapeHtml(activeRoll.values.join(', '))}${activeRoll.modifier === 0 ? '' : ` ${escapeHtml(formatSigned(activeRoll.modifier))}`}`
-              : 'Pick a denomination, set the quantity, and roll a real Dice Box scene.'
-      }
+    <div class="dice-result-grid">
+      ${roll.entries
+        .map(
+          (entry) => `
+            <button
+              class="dice-result-chip ${canRemove ? 'is-removable' : ''}"
+              ${canRemove ? `data-action="remove-die" data-roll-id="${escapeHtml(String(entry.rollId))}"` : 'disabled'}
+            >
+              <span>${escapeHtml(String(entry.dieType || `d${entry.sides}`))}</span>
+              <strong>${escapeHtml(String(entry.value ?? '--'))}</strong>
+            </button>
+          `
+        )
+        .join('')}
     </div>
   `;
 }
 
-function renderDiceToolbarRail() {
+function renderDiceSummary() {
+  const activeRoll = getVisibleDiceRoll();
+  const activeModel = getActiveDiceModel();
+
   return `
-    <button class="dice-toolbar__toggle" data-action="toggle-dice-toolbar">${state.dice.open ? 'Hide Dice' : 'Dice Toolbar'}</button>
+    <div class="dice-summary">
+      <div class="muted">${escapeHtml(activeModel?.name || 'No dice model')}</div>
+      ${activeRoll.label ? `<div class="dice-stage__label">${escapeHtml(activeRoll.label)}</div>` : ''}
+      <div class="dice-stage__formula">${escapeHtml(activeRoll.formula)}</div>
+      <div class="dice-stage__total">${escapeHtml(activeRoll.total == null ? '--' : String(activeRoll.total))}</div>
+      <div class="muted">
+        ${
+          state.dice.initError
+            ? escapeHtml(state.dice.initError)
+            : state.dice.rolling
+              ? 'Rolling through Dice Box...'
+              : state.dice.sceneRoll
+                ? 'Click the throw to peel away the latest die, or remove exact dice from the chips below.'
+                : state.dice.lastRoll
+                  ? `Individual dice: ${escapeHtml(activeRoll.values.join(', '))}${activeRoll.modifier === 0 ? '' : ` ${escapeHtml(formatSigned(activeRoll.modifier))}`}`
+                  : 'Roll straight from the toolbar or trigger checks from anywhere on the sheet.'
+        }
+      </div>
+      ${renderDiceResultChips(activeRoll)}
+    </div>
+  `;
+}
+
+function renderDiceViewportHud() {
+  const activeRoll = getVisibleDiceRoll();
+  if (!hasActiveDiceScene() && !state.dice.lastRoll) {
+    return '';
+  }
+
+  return `
+    <div class="dice-viewport__hud-card">
+      <div class="dice-viewport__eyebrow">Table Dice</div>
+      ${activeRoll.label ? `<div class="dice-viewport__label">${escapeHtml(activeRoll.label)}</div>` : ''}
+      <div class="dice-viewport__formula">${escapeHtml(activeRoll.formula)}</div>
+      <div class="dice-viewport__total">${escapeHtml(activeRoll.total == null ? '--' : String(activeRoll.total))}</div>
+    </div>
+  `;
+}
+
+function renderDiceViewportStatus() {
+  if (state.dice.initError) {
+    return `<div class="dice-viewport__status-copy">Dice Box failed to load.<br />${escapeHtml(state.dice.initError)}</div>`;
+  }
+
+  if (state.dice.initPending) {
+    return '<div class="dice-viewport__status-copy">Loading Dice Box assets...</div>';
+  }
+
+  if (state.dice.rolling) {
+    return '<div class="dice-viewport__status-copy">Throw in motion...</div>';
+  }
+
+  if (state.dice.sceneRoll?.entries?.length) {
+    return '<div class="dice-viewport__status-copy">Click the throw to peel one die away.</div>';
+  }
+
+  return '';
+}
+
+function renderDiceToolbarRail() {
+  const rollLabel = String(state.dice.formulaInput || describeRollFormula(state.dice.count, state.dice.sides, state.dice.modifier));
+
+  return `
     ${DIE_OPTIONS.map((sides) => `
       <button class="dice-toolbar__quick ${state.dice.sides === sides ? 'active' : ''}" data-action="quick-roll-die" data-sides="${sides}">d${sides}</button>
     `).join('')}
-    <button class="button primary dice-toolbar__roll" data-action="roll-dice" ${state.dice.initPending ? 'disabled' : ''}>Roll ${escapeHtml(describeRollFormula(state.dice.count, state.dice.sides, state.dice.modifier))}</button>
+    <button class="button primary dice-toolbar__roll" data-action="roll-dice" ${state.dice.initPending ? 'disabled' : ''}>Roll ${escapeHtml(rollLabel)}</button>
   `;
 }
 
@@ -2737,55 +2908,87 @@ function renderDiceToolbarControls() {
   return `
     <div class="dice-toolbar__panel-copy">
       <div>
-        <div class="section-title">Dice Box</div>
-        <div class="muted">Real 3D dice driven by the dice-model records in the database.</div>
+        <div class="section-title">Throw Builder</div>
+        <div class="muted">The whole app becomes the tray. Sheet rolls still feed the same 3D scene.</div>
       </div>
-      <div class="dice-panel__controls">
-        <label class="field">
-          <span class="label">Model</span>
-          <select class="select" id="dice-model" ${state.dice.models.length === 0 ? 'disabled' : ''}>
-            ${
-              state.dice.models.length === 0
-                ? '<option value="">No models available</option>'
-                : state.dice.models
-                    .map(
-                      (model) => `
-                        <option value="${escapeHtml(model.key)}" ${activeModel?.key === model.key ? 'selected' : ''}>
-                          ${escapeHtml(model.name)}
-                        </option>
-                      `
-                    )
-                    .join('')
-            }
-          </select>
-        </label>
-        <label class="field">
-          <span class="label">Dice Count</span>
-          <input class="input" id="dice-count" type="number" min="1" max="6" value="${escapeHtml(String(state.dice.count))}" />
-        </label>
-        <label class="field">
-          <span class="label">Modifier</span>
-          <input class="input" id="dice-modifier" type="number" min="-50" max="50" value="${escapeHtml(String(state.dice.modifier))}" />
-        </label>
-      </div>
+      ${state.dice.sceneRoll?.entries?.length ? '<button class="button subtle" data-action="clear-dice-scene">Clear Throw</button>' : ''}
+    </div>
+    <div class="dice-toolbar__form">
+      <label class="field field--formula">
+        <span class="label">Formula</span>
+        <input class="input" id="dice-formula" value="${escapeHtml(state.dice.formulaInput)}" placeholder="3d6+2" />
+      </label>
+      <button class="button subtle dice-toolbar__formula-roll" data-action="roll-dice-formula" ${state.dice.initPending ? 'disabled' : ''}>Roll Formula</button>
+    </div>
+    <div class="dice-panel__controls">
+      <label class="field">
+        <span class="label">Model</span>
+        <select class="select" id="dice-model" ${state.dice.models.length === 0 ? 'disabled' : ''}>
+          ${
+            state.dice.models.length === 0
+              ? '<option value="">No models available</option>'
+              : state.dice.models
+                  .map(
+                    (model) => `
+                      <option value="${escapeHtml(model.key)}" ${activeModel?.key === model.key ? 'selected' : ''}>
+                        ${escapeHtml(model.name)}
+                      </option>
+                    `
+                  )
+                  .join('')
+          }
+        </select>
+      </label>
+      <label class="field">
+        <span class="label">Dice Count</span>
+        <input class="input" id="dice-count" type="number" min="1" max="6" value="${escapeHtml(String(state.dice.count))}" />
+      </label>
+      <label class="field">
+        <span class="label">Modifier</span>
+        <input class="input" id="dice-modifier" type="number" min="-50" max="50" value="${escapeHtml(String(state.dice.modifier))}" />
+      </label>
     </div>
   `;
 }
 
-function renderDiceStageStatus() {
-  if (state.dice.initError) {
-    return `<div class="dice-stage__status-copy">Dice Box failed to load.<br />${escapeHtml(state.dice.initError)}</div>`;
+function renderDiceToolbarShell() {
+  ensureDiceToolbarPosition();
+  const position = clampDiceToolbarPosition(state.dice.position);
+  state.dice.position = position;
+
+  if (state.dice.hidden) {
+    return `
+      <button class="dice-peek" data-action="restore-dice-toolbar" style="left:${position.x}px; top:${position.y}px;">
+        <span>Dice</span>
+        <strong>${escapeHtml(state.dice.sceneRoll?.formula || state.dice.formulaInput)}</strong>
+      </button>
+    `;
   }
 
-  if (state.dice.initPending) {
-    return '<div class="dice-stage__status-copy">Loading Dice Box assets...</div>';
-  }
-
-  if (!state.dice.ready) {
-    return '<div class="dice-stage__status-copy">Open the tray and roll to initialize the 3D scene.</div>';
-  }
-
-  return '';
+  return `
+    <section class="dice-toolbar-shell ${state.dice.open ? 'is-open' : ''}" style="left:${position.x}px; top:${position.y}px;">
+      <header class="dice-toolbar__header" data-dice-drag-handle="true">
+        <div>
+          <div class="section-title">Table Dice</div>
+          <div class="muted">Global rolls, sheet checks, and attack throws all land in the same scene.</div>
+        </div>
+        <div class="dice-toolbar__header-actions">
+          <button class="button subtle" data-action="toggle-dice-toolbar">${state.dice.open ? 'Collapse' : 'Expand'}</button>
+          <button class="button subtle" data-action="hide-dice-toolbar">Hide</button>
+        </div>
+      </header>
+      <div class="dice-toolbar__rail">
+        ${renderDiceToolbarRail()}
+      </div>
+      ${state.dice.open ? `
+        <div class="dice-toolbar__panel">
+          <div data-dice-controls>${renderDiceToolbarControls()}</div>
+          <div class="dice-stage__summary" data-dice-summary>${renderDiceSummary()}</div>
+          <div class="dice-history" data-dice-history>${renderDiceHistory()}</div>
+        </div>
+      ` : ''}
+    </section>
+  `;
 }
 
 function ensureDiceToolbarChrome() {
@@ -2794,20 +2997,14 @@ function ensureDiceToolbarChrome() {
   }
 
   diceRoot.innerHTML = `
-    <section class="dice-toolbar-shell">
-      <div class="dice-toolbar__rail" data-dice-rail></div>
-      <div class="dice-toolbar__panel">
-        <div data-dice-controls></div>
-        <div class="dice-stage">
-          <div class="dice-stage__viewport">
-            <div class="dice-box-host" id="dice-box-host"></div>
-            <div class="dice-stage__status" data-dice-stage-status></div>
-          </div>
-          <div class="dice-stage__summary" data-dice-summary></div>
-        </div>
-        <div class="dice-history" data-dice-history></div>
+    <section class="dice-viewport-shell" data-dice-viewport>
+      <div class="dice-box-host" id="dice-box-host"></div>
+      <div class="dice-viewport__overlay">
+        <div data-dice-viewport-hud></div>
+        <div class="dice-viewport__status" data-dice-viewport-status></div>
       </div>
     </section>
+    <div data-dice-toolbar-surface></div>
   `;
   diceRoot.dataset.ready = 'true';
 }
@@ -2820,13 +3017,14 @@ function syncDiceToolbarState() {
   }
 
   ensureDiceToolbarChrome();
-  const shell = diceRoot.querySelector('.dice-toolbar-shell');
-  shell.classList.toggle('is-open', state.dice.open);
-  shell.querySelector('[data-dice-rail]').innerHTML = renderDiceToolbarRail();
-  shell.querySelector('[data-dice-controls]').innerHTML = renderDiceToolbarControls();
-  shell.querySelector('[data-dice-summary]').innerHTML = renderDiceSummary();
-  shell.querySelector('[data-dice-history]').innerHTML = renderDiceHistory();
-  shell.querySelector('[data-dice-stage-status]').innerHTML = renderDiceStageStatus();
+  const viewport = diceRoot.querySelector('[data-dice-viewport]');
+  const toolbarSurface = diceRoot.querySelector('[data-dice-toolbar-surface]');
+
+  viewport.classList.toggle('is-visible', hasActiveDiceScene() || state.dice.initPending);
+  viewport.classList.toggle('is-interactive', Boolean(state.dice.sceneRoll?.entries?.length) && !state.dice.rolling);
+  viewport.querySelector('[data-dice-viewport-hud]').innerHTML = renderDiceViewportHud();
+  viewport.querySelector('[data-dice-viewport-status]').innerHTML = renderDiceViewportStatus();
+  toolbarSurface.innerHTML = renderDiceToolbarShell();
 }
 
 function renderSheetTabs() {
@@ -3556,11 +3754,19 @@ async function handleActionClick(event) {
       case 'wizard-prev':
         if (state.wizard) {
           state.wizard.step = Math.max(0, state.wizard.step - 1);
+          state.wizard.detailType = null;
           render();
         }
         break;
       case 'wizard-next':
         await advanceWizard();
+        break;
+      case 'wizard-toggle-detail':
+        if (state.wizard) {
+          state.wizard.detailType =
+            state.wizard.detailType === target.dataset.detail ? null : target.dataset.detail;
+          render();
+        }
         break;
       case 'wizard-score':
         setWizardScore(target.dataset.ability, Number(target.dataset.score));
@@ -3573,6 +3779,7 @@ async function handleActionClick(event) {
         break;
       case 'toggle-dice-toolbar':
         state.dice.open = !state.dice.open;
+        ensureDiceToolbarPosition();
         renderFloatingSurfaces();
         if (state.dice.open) {
           try {
@@ -3589,6 +3796,24 @@ async function handleActionClick(event) {
         break;
       case 'roll-dice':
         await rollDice();
+        break;
+      case 'roll-dice-formula':
+        await rollDiceFormula(document.getElementById('dice-formula')?.value || state.dice.formulaInput);
+        break;
+      case 'hide-dice-toolbar':
+        state.dice.hidden = true;
+        renderFloatingSurfaces();
+        break;
+      case 'restore-dice-toolbar':
+        state.dice.hidden = false;
+        ensureDiceToolbarPosition();
+        renderFloatingSurfaces();
+        break;
+      case 'clear-dice-scene':
+        await clearDiceScene();
+        break;
+      case 'remove-die':
+        await removeDieFromScene(target.dataset.rollId);
         break;
       case 'toggle-equip': {
         const character = activeCharacter();
@@ -3736,6 +3961,11 @@ function handleInput(event) {
     return;
   }
 
+  if (target.id === 'dice-formula') {
+    state.dice.formulaInput = target.value;
+    return;
+  }
+
   if (target.id === 'roster-query') {
     state.rosterQuery = target.value;
     render();
@@ -3836,6 +4066,34 @@ function startCompendiumDrag(event) {
   renderFloatingSurfaces();
 }
 
+function startDiceToolbarDrag(event) {
+  const handle = event.target.closest('[data-dice-drag-handle]');
+  if (!handle || event.button !== 0 || state.dice.hidden) {
+    return;
+  }
+
+  if (event.target.closest('button, input, select, textarea')) {
+    return;
+  }
+
+  const toolbarElement = handle.closest('.dice-toolbar-shell');
+  if (!toolbarElement) {
+    return;
+  }
+
+  const rect = toolbarElement.getBoundingClientRect();
+  state.dice.position = clampDiceToolbarPosition({
+    x: rect.left,
+    y: rect.top,
+  });
+  diceToolbarDragState = {
+    offsetX: event.clientX - rect.left,
+    offsetY: event.clientY - rect.top,
+  };
+  event.preventDefault();
+  renderFloatingSurfaces();
+}
+
 function handleCompendiumPointerMove(event) {
   if (!compendiumDragState || state.compendiumDock) {
     return;
@@ -3855,8 +4113,48 @@ function handleCompendiumPointerMove(event) {
   windowElement.style.top = `${state.compendiumPosition.y}px`;
 }
 
+function handleDiceToolbarPointerMove(event) {
+  if (!diceToolbarDragState || state.dice.hidden) {
+    return;
+  }
+
+  state.dice.position = clampDiceToolbarPosition({
+    x: event.clientX - diceToolbarDragState.offsetX,
+    y: event.clientY - diceToolbarDragState.offsetY,
+  });
+
+  const toolbarElement = diceRoot.querySelector('.dice-toolbar-shell');
+  if (!toolbarElement) {
+    return;
+  }
+
+  toolbarElement.style.left = `${state.dice.position.x}px`;
+  toolbarElement.style.top = `${state.dice.position.y}px`;
+}
+
 function stopCompendiumDrag() {
   compendiumDragState = null;
+}
+
+function stopDiceToolbarDrag() {
+  diceToolbarDragState = null;
+}
+
+function handleFloatingRootClick(event) {
+  if (event.target.closest('[data-action], .dice-toolbar-shell, .dice-peek, .compendium-window, .compendium-peek')) {
+    return;
+  }
+
+  const clickedViewport =
+    event.target.closest('.dice-viewport-shell') ||
+    event.target.closest('#dice-box-host') ||
+    event.target.classList?.contains('dice-box-canvas');
+
+  if (!clickedViewport || !state.dice.sceneRoll?.entries?.length || state.dice.rolling) {
+    return;
+  }
+
+  void removeDieFromScene();
 }
 
 function bindInteractiveRoot(root) {
@@ -3871,12 +4169,17 @@ function bindInteractiveRoot(root) {
 bindInteractiveRoot(appRoot);
 bindInteractiveRoot(floatingRoot);
 floatingRoot.addEventListener('pointerdown', startCompendiumDrag);
+floatingRoot.addEventListener('pointerdown', startDiceToolbarDrag);
+floatingRoot.addEventListener('click', handleFloatingRootClick);
 window.addEventListener('pointermove', handleCompendiumPointerMove);
+window.addEventListener('pointermove', handleDiceToolbarPointerMove);
 window.addEventListener('pointerup', stopCompendiumDrag);
+window.addEventListener('pointerup', stopDiceToolbarDrag);
 window.addEventListener('resize', () => {
   if (!state.compendiumDock) {
     state.compendiumPosition = clampCompendiumPosition(state.compendiumPosition);
   }
+  state.dice.position = clampDiceToolbarPosition(state.dice.position);
   renderFloatingSurfaces();
 });
 

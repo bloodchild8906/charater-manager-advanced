@@ -45,6 +45,20 @@ function renderSelectionDetailCard({ label, entry, emptyCopy, extraLines = [] })
   `;
 }
 
+function renderSelectionDetailTriggerCard({ label, entry, detailType, actionLabel, summary }) {
+  return `
+    <article class="wizard-selection-teaser">
+      <div class="wizard-selection-teaser__header">
+        <div class="wizard-review-card__label">${escapeHtml(label)}</div>
+        ${entry?.sourceCode ? `<span class="pill-badge">${escapeHtml(entry.sourceCode)}</span>` : ''}
+      </div>
+      <div class="wizard-selection-teaser__title">${escapeHtml(entry?.name || 'Choose')}</div>
+      ${summary ? `<div class="muted wizard-selection-teaser__copy">${escapeHtml(summary)}</div>` : ''}
+      <button class="button subtle button--small" data-action="wizard-toggle-detail" data-detail="${escapeHtml(detailType)}">${escapeHtml(actionLabel)}</button>
+    </article>
+  `;
+}
+
 export function renderWizardModal({
   wizard,
   steps,
@@ -62,6 +76,18 @@ export function renderWizardModal({
   const classEntry = getCompendiumEntryBySlug('classes', wizard.draft.classSlug);
   const ancestryEntry = getCompendiumEntryBySlug('ancestries', wizard.draft.ancestrySlug);
   const backgroundEntry = getCompendiumEntryBySlug('backgrounds', wizard.draft.backgroundSlug);
+  const detailEntryByType = {
+    class: classEntry,
+    ancestry: ancestryEntry,
+    background: backgroundEntry,
+  };
+  const detailLabelByType = {
+    class: 'Class Details',
+    ancestry: 'Ancestry Details',
+    background: 'Background Details',
+  };
+  const selectedDetailType = wizard.detailType || null;
+  const selectedDetailEntry = selectedDetailType ? detailEntryByType[selectedDetailType] : null;
   let content;
 
   if (wizard.mode === 'levelup') {
@@ -164,24 +190,48 @@ export function renderWizardModal({
             <div class="wizard-review-card__value">${escapeHtml(backgroundEntry?.name || 'Choose')}</div>
           </div>
         </div>
-        <div class="wizard-selection-details">
-          ${renderSelectionDetailCard({
-            label: 'Class Details',
+        <div class="wizard-selection-actions">
+          ${renderSelectionDetailTriggerCard({
+            label: 'Class',
             entry: classEntry,
-            extraLines: classEntry?.hitDie ? [`**Hit Die:** d${classEntry.hitDie}`] : [],
-            emptyCopy: 'Select a class to review its rules text.',
+            detailType: 'class',
+            actionLabel: selectedDetailType === 'class' ? 'Hide Details' : 'Read Details',
+            summary: classEntry?.hitDie ? `Hit Die d${classEntry.hitDie}` : '',
           })}
-          ${renderSelectionDetailCard({
-            label: 'Ancestry Details',
+          ${renderSelectionDetailTriggerCard({
+            label: 'Ancestry',
             entry: ancestryEntry,
-            emptyCopy: 'Select an ancestry to review its traits.',
+            detailType: 'ancestry',
+            actionLabel: selectedDetailType === 'ancestry' ? 'Hide Details' : 'Read Details',
+            summary: ancestryEntry?.sourceCode ? `Source ${ancestryEntry.sourceCode}` : '',
           })}
-          ${renderSelectionDetailCard({
-            label: 'Background Details',
+          ${renderSelectionDetailTriggerCard({
+            label: 'Background',
             entry: backgroundEntry,
-            emptyCopy: 'Select a background to review its features.',
+            detailType: 'background',
+            actionLabel: selectedDetailType === 'background' ? 'Hide Details' : 'Read Details',
+            summary: backgroundEntry?.sourceCode ? `Source ${backgroundEntry.sourceCode}` : '',
           })}
         </div>
+        ${
+          selectedDetailType
+            ? `
+              <div class="wizard-detail-drawer">
+                ${renderSelectionDetailCard({
+                  label: detailLabelByType[selectedDetailType],
+                  entry: selectedDetailEntry,
+                  extraLines: selectedDetailType === 'class' && selectedDetailEntry?.hitDie ? [`**Hit Die:** d${selectedDetailEntry.hitDie}`] : [],
+                  emptyCopy:
+                    selectedDetailType === 'class'
+                      ? 'Select a class to review its rules text.'
+                      : selectedDetailType === 'ancestry'
+                        ? 'Select an ancestry to review its traits.'
+                        : 'Select a background to review its features.',
+                })}
+              </div>
+            `
+            : ''
+        }
       </div>
     `;
   } else if (wizard.step === 2) {

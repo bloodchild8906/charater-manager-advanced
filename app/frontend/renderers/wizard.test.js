@@ -47,7 +47,7 @@ describe('wizard renderer', () => {
     expect(markdown).toContain('ancient magic');
   });
 
-  it('renders markdown-backed detail cards for lineage selections', () => {
+  it('renders button-driven lineage details inside the wizard', () => {
     const entryMap = createEntryMap();
     const getCompendiumEntries = (type) => entryMap[type] || [];
     const getCompendiumEntryBySlug = (type, slug) =>
@@ -73,6 +73,7 @@ describe('wizard renderer', () => {
         },
         assignedScores: {},
         availableScores: [15, 14, 13, 12, 10, 8],
+        detailType: 'class',
       },
       steps: ['Identity', 'Lineage', 'Abilities', 'Combat', 'Review'],
       canAdvance: true,
@@ -82,11 +83,12 @@ describe('wizard renderer', () => {
       renderSummaryCards: () => '<div>summary</div>',
     });
 
-    expect(html).toContain('wizard-selection-details');
+    expect(html).toContain('wizard-selection-actions');
+    expect(html).toContain('data-action="wizard-toggle-detail" data-detail="class"');
+    expect(html).toContain('Hide Details');
     expect(html).toContain('<strong>Arcane</strong> scholar.');
     expect(html).toContain('<ul><li>Spellcasting</li><li>Ritual Casting</li></ul>');
-    expect(html).toContain('<em>keen senses</em>');
     expect(html).toContain('Class Details');
-    expect(html).toContain('Background Details');
+    expect(html).not.toContain('<em>keen senses</em>');
   });
 });

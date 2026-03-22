@@ -661,7 +661,7 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-const port = Number(process.env.PORT || 8080);
+const port = Number(process.env.PORT || 50505);
 server.listen(port, () => {
   console.log(`5e-database server listening on ${port} using ${getProvider()}`);
 });
