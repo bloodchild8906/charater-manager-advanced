@@ -4,7 +4,7 @@
   "description": "Database for 5e-srd-api",
   "private": true,
   "engines": {
-    "node": ">=22 <25"
+    "node": ">=24 <25"
   },
   "scripts": {
     "start": "node --experimental-sqlite app/server.js",

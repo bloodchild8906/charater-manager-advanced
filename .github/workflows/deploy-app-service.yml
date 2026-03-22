@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: '22'
+  NODE_VERSION: '24'
 
 jobs:
   build-test-seed:
@@ -101,7 +101,7 @@ jobs:
         run: |
           node <<'EOF' >> "$GITHUB_OUTPUT"
           const settings = [
-            { name: 'WEBSITE_NODE_DEFAULT_VERSION', value: '~22', slotSetting: false },
+            { name: 'WEBSITE_NODE_DEFAULT_VERSION', value: '~24', slotSetting: false },
             { name: 'NODE_ENV', value: 'production', slotSetting: false },
             { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'true', slotSetting: false },
             { name: 'ENABLE_ORYX_BUILD', value: 'true', slotSetting: false },
