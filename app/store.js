@@ -223,6 +223,26 @@ function mapSearchResult(type, row) {
   };
 }
 
+function compareTextValues(left, right) {
+  return String(left || '').localeCompare(String(right || ''), undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  });
+}
+
+function sortRowsByText(rows, key) {
+  return [...rows].sort((left, right) => compareTextValues(left?.[key], right?.[key]));
+}
+
+function sortRowsByDate(rows, key, direction = 'asc') {
+  const multiplier = direction === 'desc' ? -1 : 1;
+  return [...rows].sort((left, right) => {
+    const leftValue = Date.parse(left?.[key] || 0);
+    const rightValue = Date.parse(right?.[key] || 0);
+    return (leftValue - rightValue) * multiplier;
+  });
+}
+
 async function ensureAppStorage() {
   const provider = getProvider();
 
@@ -276,9 +296,8 @@ async function listSources() {
       const rows = await db
         .collection('sources')
         .find({}, { projection: { _id: 0, id: 1, code: 1, name: 1 } })
-        .sort({ code: 1 })
         .toArray();
-      return rows.map(mapSource);
+      return sortRowsByText(rows, 'code').map(mapSource);
     }
     default:
       return withSqlite((db) =>
@@ -340,11 +359,11 @@ async function getBootstrapData(edition) {
     }
     case DATABASE_PROVIDERS.MONGODB: {
       const db = await getMongoDb();
-      const sources = await db
+      const sourceRows = await db
         .collection('sources')
         .find({}, { projection: { _id: 0, id: 1, code: 1, name: 1 } })
-        .sort({ code: 1 })
         .toArray();
+      const sources = sortRowsByText(sourceRows, 'code');
       const sourceMap = new Map(sources.map((source) => [source.id, source]));
       const sourceId =
         normalizedEdition === 'all'
@@ -354,36 +373,36 @@ async function getBootstrapData(edition) {
       const conditionFilter = sourceId ? { source_id: sourceId } : {};
 
       const [classes, backgrounds, ancestries, conditions] = await Promise.all([
-        db.collection('entities').find({ ...entityFilter, entity_type: 'class' }).sort({ name: 1 }).toArray(),
-        db.collection('entities').find({ ...entityFilter, entity_type: 'background' }).sort({ name: 1 }).toArray(),
-        db.collection('entities').find({ ...entityFilter, entity_type: 'ancestry' }).sort({ name: 1 }).toArray(),
-        db.collection('lookups').find({ ...conditionFilter, lookup_type: 'condition' }).sort({ name: 1 }).toArray(),
+        db.collection('entities').find({ ...entityFilter, entity_type: 'class' }).toArray(),
+        db.collection('entities').find({ ...entityFilter, entity_type: 'background' }).toArray(),
+        db.collection('entities').find({ ...entityFilter, entity_type: 'ancestry' }).toArray(),
+        db.collection('lookups').find({ ...conditionFilter, lookup_type: 'condition' }).toArray(),
       ]);
 
       return {
         sources: sources.map(mapSource),
-        classes: classes.map((row) =>
+        classes: sortRowsByText(classes, 'name').map((row) =>
           mapEntity({
             ...row,
             sourceCode: sourceMap.get(row.source_id)?.code,
             sourceName: sourceMap.get(row.source_id)?.name,
           })
         ),
-        backgrounds: backgrounds.map((row) =>
+        backgrounds: sortRowsByText(backgrounds, 'name').map((row) =>
           mapEntity({
             ...row,
             sourceCode: sourceMap.get(row.source_id)?.code,
             sourceName: sourceMap.get(row.source_id)?.name,
           })
         ),
-        ancestries: ancestries.map((row) =>
+        ancestries: sortRowsByText(ancestries, 'name').map((row) =>
           mapEntity({
             ...row,
             sourceCode: sourceMap.get(row.source_id)?.code,
             sourceName: sourceMap.get(row.source_id)?.name,
           })
         ),
-        conditions: conditions.map((row) =>
+        conditions: sortRowsByText(conditions, 'name').map((row) =>
           mapCondition({
             ...row,
             sourceCode: sourceMap.get(row.source_id)?.code,
@@ -490,10 +509,11 @@ async function searchCompendium({ type, query = '', edition = 'all', limit = 20 
     }
     case DATABASE_PROVIDERS.MONGODB: {
       const db = await getMongoDb();
-      const sources = await db
+      const sourceRows = await db
         .collection('sources')
         .find({}, { projection: { _id: 0, id: 1, code: 1, name: 1 } })
         .toArray();
+      const sources = sortRowsByText(sourceRows, 'code');
       const sourceMap = new Map(sources.map((source) => [source.id, source]));
       const sourceId =
         normalizedEdition === 'all'
@@ -508,8 +528,10 @@ async function searchCompendium({ type, query = '', edition = 'all', limit = 20 
           { higher_level_text: { $regex: trimmedQuery, $options: 'i' } },
         ];
       }
-      const rows = await db.collection(type).find(filter).sort({ name: 1 }).limit(safeLimit).toArray();
-      return rows.map((row) =>
+      const rows = await db.collection(type).find(filter).toArray();
+      return sortRowsByText(rows, 'name')
+        .slice(0, safeLimit)
+        .map((row) =>
         mapSearchResult(type, {
           ...row,
           sourceCode: sourceMap.get(row.source_id)?.code,
@@ -715,9 +737,8 @@ async function listUsers() {
           {},
           { projection: { _id: 0, id: 1, email: 1, display_name: 1, role: 1, created_at: 1, updated_at: 1 } }
         )
-        .sort({ created_at: 1 })
         .toArray();
-      return rows.map(sanitizeUser);
+      return sortRowsByDate(rows, 'created_at').map(sanitizeUser);
     }
     default:
       return withSqlite((db) =>
@@ -942,11 +963,11 @@ async function listCharacters(viewer) {
       const db = await getMongoDb();
       const filter = isGlobalCharacterAccess(viewer.role) ? {} : { owner_user_id: viewer.id };
       const [characters, users] = await Promise.all([
-        db.collection('characters').find(filter).sort({ updated_at: -1 }).toArray(),
+        db.collection('characters').find(filter).toArray(),
         db.collection('users').find({}, { projection: { _id: 0, id: 1, display_name: 1 } }).toArray(),
       ]);
       const userMap = new Map(users.map((user) => [user.id, user.display_name]));
-      return characters.map((row) =>
+      return sortRowsByDate(characters, 'updated_at', 'desc').map((row) =>
         mapCharacter({ ...row, ownerDisplayName: userMap.get(row.owner_user_id) || null })
       );
     }
