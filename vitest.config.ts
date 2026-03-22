@@ -5,17 +5,21 @@ export default defineConfig({
   test: {
     // Glob pattern to find test files
     include: ['**/*.test.js'],
+    exclude: ['**/node_modules/**', '**/.tmp/**', '**/dist/**', '**/built/**'],
     // Test environment (node, jsdom, happy-dom, edge-runtime)
     // 'node' is suitable for backend/Node.js tests. Use 'jsdom' if you need browser APIs.
     environment: 'node',
     // Enable globals like describe, it, expect for Jest compatibility
     globals: true,
+    testTimeout: 30000,
+    hookTimeout: 30000,
     coverage: {
       // Coverage provider
       provider: 'v8', // or 'istanbul'
       // Files to ignore in coverage reports
       exclude: [
         'node_modules/**', // Equivalent to coveragePathIgnorePatterns
+        '.tmp/**',
         'coverage/**', // Ignore the coverage output directory
         'dist/**', // Ignore build output
         // Add any other paths you want to ignore
