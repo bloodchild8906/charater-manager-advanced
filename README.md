@@ -1,0 +1,83 @@
+# 5e-database
+
+![Build Status](https://github.com/5e-bits/5e-database/workflows/5e%20Database%20CI/badge.svg?branch=main)
+[![Discord](https://img.shields.io/discord/656547667601653787)](https://discord.gg/TQuYTv7)
+
+Holds the database for the D&D 5th Edition API at http://dnd5eapi.co/
+
+Talk to us [on Discord!](https://discord.gg/TQuYTv7)
+
+## How to run
+
+This project writes the SRD data into a normalized SQLite database.
+
+By default the database is written to `data/5e-database.sqlite`.
+
+The schema uses these core tables:
+
+- `sources`
+- `lookups`
+- `entities`
+- `features`
+- `spells`
+- `items`
+- `actors`
+- `links`
+
+You can build or rebuild it locally by running:
+
+```bash
+npm run db:refresh
+```
+
+Or seed it directly with the dedicated seed script:
+
+```bash
+npm run db:seed
+```
+
+To use a custom path:
+
+```bash
+SQLITE_DB_PATH=./tmp/5e-database.sqlite npm run db:refresh
+```
+
+`db:refresh` and `db:seed` both rebuild the database from the JSON source files.
+
+`db:update` is currently not implemented for the normalized schema:
+
+```bash
+npm run db:update
+```
+
+## API Issues
+
+If you see anything wrong with the API and not the data, please open an issue or PR over [here](https://github.com/5e-bits/5e-srd-api).
+
+## Contributing
+
+* Fork this repository
+* Create a new branch for your work
+* Push up any changes to your branch, and open a pull request. Don't feel it needs to be perfect — incomplete work is totally fine. We'd love to help get it ready for merging.
+* We use Semantic Release so here are the PR naming convetions:
+
+| Commit message                                                                                                                                                                             | Release type                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| fix(pencil): stop graphite breaking when too much pressure applied                                                                                                                         | Patch Fix Release                                                                                        |
+| feat(pencil): add 'graphiteWidth' option                                                                                                                                                   | Minor Feature Release                                                                                    |
+| perf(pencil): remove graphiteWidth option<br><br>BREAKING CHANGE: The graphiteWidth option has been removed.<br>The default graphite width of 10mm is always used for performance reasons. | Major Breaking Release<br><br>(Note that the BREAKING CHANGE: token must be in the footer of the commit) |
+
+## Code of Conduct
+
+The Code of Conduct can be found [here.](https://github.com/5e-bits/5e-database/wiki/Code-of-Conduct)
+
+## License
+
+This project is licensed under the terms of the MIT license. The underlying material
+is released using the [Open Gaming License Version 1.0a](https://www.wizards.com/default.asp?x=d20/oglfaq/20040123f)
+
+## Contributors
+
+<a href="https://github.com/5e-bits/5e-database/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=5e-bits/5e-database" />
+</a>

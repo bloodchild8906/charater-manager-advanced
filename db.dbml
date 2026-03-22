@@ -1,0 +1,243 @@
+Project dnd5e_srd_minimal {
+  database_type: "PostgreSQL"
+  Note: "Minimal practical D&D 5e SRD schema using generic tables for dbdiagram.io"
+}
+
+Table sources {
+  id uuid [pk]
+  code varchar [not null, unique]
+  name varchar [not null]
+  publisher varchar
+  license_name varchar
+  license_url varchar
+  is_homebrew boolean [not null, default: false]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table lookups {
+  id uuid [pk]
+  source_id uuid [ref: > sources.id]
+  lookup_type varchar [not null, note: 'ability,size,alignment,damage_type,condition,sense,rest,currency,school,activation,taxonomy,item_type,equipment_slot,language,skill,creature_type,etc']
+  code varchar [not null]
+  name varchar [not null]
+  parent_lookup_id uuid [ref: > lookups.id]
+  sort_order int
+  numeric_value decimal(12,4)
+  text_value text
+  json_value jsonb
+  description text
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (lookup_type, code) [unique]
+    (lookup_type, name)
+    parent_lookup_id
+  }
+}
+
+Table entities {
+  id uuid [pk]
+  source_id uuid [ref: > sources.id]
+  entity_type varchar [not null, note: 'class,subclass,ancestry,background']
+  parent_entity_id uuid [ref: > entities.id, note: 'used for subclass -> class or subrace/lineage -> ancestry']
+  slug varchar [unique]
+  code varchar
+  name varchar [not null]
+  size_lookup_id uuid [ref: > lookups.id]
+  spellcasting_ability_lookup_id uuid [ref: > lookups.id]
+  hit_die int
+  level_min int
+  level_max int
+  primary_lookup_ids jsonb [note: 'e.g. primary abilities, saving throw proficiencies']
+  granted_lookup_ids jsonb [note: 'e.g. skills, languages, tools, armor/weapon proficiencies']
+  movement_json jsonb
+  prerequisite_json jsonb
+  choice_rules_json jsonb
+  stats_json jsonb
+  tags_json jsonb
+  description text
+  srd boolean [not null, default: true]
+  is_homebrew boolean [not null, default: false]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (entity_type, name) [unique]
+    (entity_type, code)
+    parent_entity_id
+    source_id
+  }
+}
+
+Table features {
+  id uuid [pk]
+  source_id uuid [ref: > sources.id]
+  feature_type varchar [not null, note: 'class_feature,subclass_feature,ancestry_trait,background_feature,feat,ancestry_feat']
+  slug varchar [unique]
+  code varchar
+  name varchar [not null]
+  level_required int
+  activation_lookup_id uuid [ref: > lookups.id]
+  rest_lookup_id uuid [ref: > lookups.id]
+  repeatable boolean [not null, default: false]
+  requires_choice boolean [not null, default: false]
+  prerequisite_json jsonb
+  choice_options_json jsonb
+  uses_json jsonb
+  effects_json jsonb
+  tags_json jsonb
+  description text [not null]
+  short_description text
+  srd boolean [not null, default: true]
+  is_homebrew boolean [not null, default: false]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (feature_type, name) [unique]
+    (feature_type, code)
+    source_id
+  }
+}
+
+Table spells {
+  id uuid [pk]
+  source_id uuid [ref: > sources.id]
+  slug varchar [unique]
+  code varchar
+  name varchar [not null]
+  level int [not null]
+  school_lookup_id uuid [not null, ref: > lookups.id]
+  activation_lookup_id uuid [ref: > lookups.id]
+  casting_time varchar [not null]
+  range_text varchar [not null]
+  duration_text varchar [not null]
+  save_ability_lookup_id uuid [ref: > lookups.id]
+  ritual boolean [not null, default: false]
+  concentration boolean [not null, default: false]
+  verbal boolean [not null, default: false]
+  somatic boolean [not null, default: false]
+  material boolean [not null, default: false]
+  material_description text
+  attack_type varchar
+  components_json jsonb
+  damage_json jsonb
+  scaling_json jsonb
+  tags_json jsonb
+  description text [not null]
+  higher_level_text text
+  srd boolean [not null, default: true]
+  is_homebrew boolean [not null, default: false]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    name [unique]
+    (level, school_lookup_id)
+    source_id
+  }
+}
+
+Table items {
+  id uuid [pk]
+  source_id uuid [ref: > sources.id]
+  slug varchar [unique]
+  code varchar
+  name varchar [not null]
+  item_type_lookup_id uuid [not null, ref: > lookups.id]
+  equipment_slot_lookup_id uuid [ref: > lookups.id]
+  rarity_lookup_id uuid [ref: > lookups.id]
+  cost_currency_lookup_id uuid [ref: > lookups.id]
+  weight_lb decimal(10,2)
+  cost_amount decimal(12,2)
+  is_magical boolean [not null, default: false]
+  requires_attunement boolean [not null, default: false]
+  stackable boolean [not null, default: true]
+  consumable boolean [not null, default: false]
+  tags_json jsonb
+  properties_json jsonb
+  profile_json jsonb [note: 'weapon, armor, tool, gear, container, vehicle, magical item, etc']
+  description text
+  srd boolean [not null, default: true]
+  is_homebrew boolean [not null, default: false]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    name [unique]
+    item_type_lookup_id
+    source_id
+  }
+}
+
+Table actors {
+  id uuid [pk]
+  source_id uuid [ref: > sources.id]
+  slug varchar [unique]
+  code varchar
+  name varchar [not null]
+  actor_type varchar [not null, note: 'monster,npc,beast,companion,template,other']
+  parent_actor_id uuid [ref: > actors.id]
+  taxonomy_lookup_id uuid [ref: > lookups.id]
+  size_lookup_id uuid [ref: > lookups.id]
+  alignment_lookup_id uuid [ref: > lookups.id]
+  challenge_rating decimal(6,2)
+  proficiency_bonus int
+  armor_class int
+  hit_points int
+  hit_dice varchar
+  initiative_bonus int
+  passive_perception int
+  abilities_json jsonb
+  saves_json jsonb
+  skills_json jsonb
+  movement_json jsonb
+  senses_json jsonb
+  languages_json jsonb
+  immunities_json jsonb
+  resistances_json jsonb
+  vulnerabilities_json jsonb
+  conditions_json jsonb
+  traits_json jsonb
+  actions_json jsonb
+  spellcasting_json jsonb
+  inventory_json jsonb
+  description text
+  srd boolean [not null, default: true]
+  is_homebrew boolean [not null, default: false]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    name [unique]
+    actor_type
+    taxonomy_lookup_id
+    source_id
+  }
+}
+
+Table links {
+  id uuid [pk]
+  source_id uuid [ref: > sources.id]
+  link_type varchar [not null, note: 'entity_feature,entity_spell,feature_spell,feature_item,actor_spell,actor_item,entity_entity,actor_feature,etc']
+  left_table varchar [not null, note: 'entities,features,spells,items,actors,lookups']
+  left_id uuid [not null]
+  right_table varchar [not null, note: 'entities,features,spells,items,actors,lookups']
+  right_id uuid [not null]
+  relationship_role varchar [note: 'grants,requires,belongs_to,casts,uses,learns,contains,resists,etc']
+  sort_order int
+  level_required int
+  quantity decimal(12,2)
+  metadata_json jsonb
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (link_type, left_table, left_id)
+    (link_type, right_table, right_id)
+    (left_table, left_id, right_table, right_id, relationship_role) [unique]
+  }
+}
