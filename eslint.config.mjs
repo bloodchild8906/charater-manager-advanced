@@ -35,6 +35,17 @@ export default [
     },
   },
   {
+    name: 'service-worker',
+    files: ['app/sw.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: {
+        ...globals.browser,
+        ...globals.serviceworker,
+      },
+    },
+  },
+  {
     name: 'vitest/recommended',
     files: ['**/*.test.{js,ts}'],
     ignores: ['**/*.json'],

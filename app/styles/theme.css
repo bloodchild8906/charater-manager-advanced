@@ -1,0 +1,198 @@
+:root {
+  color-scheme: dark;
+  --bg: #130b09;
+  --bg-elevated: rgba(30, 18, 14, 0.92);
+  --bg-panel: rgba(42, 28, 21, 0.95);
+  --bg-panel-strong: rgba(53, 35, 27, 0.98);
+  --bg-soft: rgba(103, 70, 50, 0.26);
+  --surface: rgba(255, 247, 229, 0.06);
+  --surface-strong: rgba(255, 247, 229, 0.11);
+  --border: rgba(205, 169, 110, 0.24);
+  --border-strong: rgba(177, 75, 59, 0.48);
+  --text: #f7ecd8;
+  --text-soft: #dfceb7;
+  --text-dim: #a78d73;
+  --accent: #d7a84d;
+  --accent-strong: #f3d393;
+  --accent-alt: #a94e40;
+  --success: #83ad79;
+  --danger: #d27a69;
+  --info: #cba179;
+  --shadow: 0 30px 90px rgba(7, 3, 1, 0.46);
+  --radius-xl: 30px;
+  --radius-lg: 24px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+  --heading: "Cinzel", serif;
+  --body: "Alegreya", serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(225, 178, 94, 0.18), transparent 26%),
+    radial-gradient(circle at 84% 12%, rgba(161, 62, 49, 0.18), transparent 22%),
+    radial-gradient(circle at bottom center, rgba(88, 49, 33, 0.26), transparent 32%),
+    linear-gradient(180deg, #0e0908 0%, #1b110e 38%, #241510 100%);
+  color: var(--text);
+  font-family: var(--body);
+}
+
+body::before {
+  background-image:
+    linear-gradient(rgba(255, 240, 214, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 240, 214, 0.02) 1px, transparent 1px),
+    radial-gradient(circle at center, rgba(255, 214, 142, 0.08), transparent 70%);
+  background-size: 96px 96px, 96px 96px, auto;
+  opacity: 0.28;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at center, transparent 52%, rgba(0, 0, 0, 0.35) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.18));
+}
+
+#app,
+#floating-overlay-root {
+  position: relative;
+  z-index: 1;
+}
+
+.panel,
+.hero-card,
+.editor-card,
+.compendium-card,
+.modal-panel,
+.compendium-window,
+.dice-toolbar-shell,
+.dice-peek,
+.compendium-peek {
+  border-color: var(--border);
+  box-shadow: var(--shadow);
+}
+
+.panel,
+.hero-card,
+.editor-card,
+.compendium-card,
+.modal-panel {
+  background:
+    linear-gradient(180deg, rgba(61, 41, 30, 0.98), rgba(31, 21, 16, 0.95)),
+    radial-gradient(circle at top, rgba(255, 222, 173, 0.06), transparent 55%);
+}
+
+.topbar,
+.sheet-nav-shell,
+.compendium-window,
+.dice-toolbar-shell {
+  background:
+    linear-gradient(180deg, rgba(59, 40, 29, 0.98), rgba(26, 17, 14, 0.96)),
+    radial-gradient(circle at top left, rgba(215, 168, 77, 0.08), transparent 38%);
+}
+
+.button {
+  border: 1px solid rgba(211, 180, 124, 0.18);
+  border-radius: 999px;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.button:hover,
+.button:focus-visible,
+.tab:hover,
+.sheet-tab:hover {
+  border-color: rgba(243, 211, 147, 0.36);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.24);
+  transform: translateY(-1px);
+}
+
+.button.primary {
+  color: #2e180d;
+  background: linear-gradient(180deg, #f0cf8d, #d7a84d);
+  border-color: rgba(255, 227, 170, 0.52);
+}
+
+.button.subtle,
+.button:not(.primary):not(.danger) {
+  background: rgba(255, 246, 227, 0.05);
+}
+
+.button.danger {
+  background: rgba(169, 78, 64, 0.18);
+  border-color: rgba(210, 122, 105, 0.42);
+}
+
+.input,
+.select,
+textarea {
+  background: rgba(18, 11, 9, 0.56);
+  border: 1px solid rgba(206, 169, 110, 0.2);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255, 244, 220, 0.04);
+}
+
+.input:focus,
+.select:focus,
+textarea:focus {
+  outline: none;
+  border-color: rgba(243, 211, 147, 0.46);
+  box-shadow:
+    0 0 0 3px rgba(215, 168, 77, 0.16),
+    inset 0 1px 0 rgba(255, 244, 220, 0.05);
+}
+
+.eyebrow,
+.section-title,
+.label,
+.message__label {
+  letter-spacing: 0.18em;
+}
+
+.topbar-title,
+.auth-title,
+.modal-title,
+.sheet-header__title-row .character-title {
+  text-wrap: balance;
+}
+
+.badge,
+.pill-badge,
+.mini-badge {
+  background: rgba(255, 245, 221, 0.06);
+  border: 1px solid rgba(211, 180, 124, 0.16);
+}
+
+.tab,
+.sheet-tab,
+.wizard-score-button,
+.condition-chip {
+  background: rgba(255, 247, 229, 0.04);
+  border: 1px solid rgba(211, 180, 124, 0.16);
+}
+
+.tab.active,
+.sheet-tab.active,
+.wizard-score-button.active,
+.condition-chip.active,
+.compendium-window__controls .button.active {
+  background: linear-gradient(180deg, rgba(240, 207, 141, 0.2), rgba(215, 168, 77, 0.14));
+  border-color: rgba(243, 211, 147, 0.42);
+}
+
+.muted,
+.empty-card,
+.empty-sheet__copy {
+  color: var(--text-soft);
+}

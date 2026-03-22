@@ -1,0 +1,40 @@
+.auth-shell {
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
+  gap: 24px;
+}
+
+.hero-card--auth {
+  min-height: 620px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.hero-grid {
+  margin-top: 28px;
+}
+
+.hero-stat {
+  background: rgba(18, 10, 8, 0.4);
+}
+
+.auth-card {
+  align-self: stretch;
+}
+
+@media (max-width: 1120px) {
+  .auth-shell {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .hero-card--auth {
+    min-height: auto;
+    padding: 28px;
+  }
+
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
+}

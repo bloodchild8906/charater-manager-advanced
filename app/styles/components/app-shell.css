@@ -1,0 +1,54 @@
+.screen {
+  padding: 24px;
+}
+
+.app-shell,
+.auth-shell {
+  position: relative;
+  z-index: 1;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.workspace--sheet-focus {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sidebar {
+  display: grid;
+  gap: 18px;
+  align-self: start;
+  position: sticky;
+  top: 112px;
+}
+
+.editor {
+  min-width: 0;
+}
+
+.loading-card {
+  max-width: 720px;
+  margin: min(10vh, 96px) auto 0;
+}
+
+@media (max-width: 1180px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    order: 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .screen {
+    padding: 16px;
+  }
+}

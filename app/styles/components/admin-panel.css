@@ -1,0 +1,8 @@
+.admin-panel .item-list {
+  display: grid;
+  gap: 12px;
+}
+
+.role-select {
+  min-width: 132px;
+}
