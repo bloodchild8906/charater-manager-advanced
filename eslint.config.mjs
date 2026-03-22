@@ -25,6 +25,16 @@ export default [
     },
   },
   {
+    name: 'browser-modules',
+    files: ['app/app.js', 'app/frontend/**/*.js'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: {
+        ...globals.browser,
+      },
+    },
+  },
+  {
     name: 'vitest/recommended',
     files: ['**/*.test.{js,ts}'],
     ignores: ['**/*.json'],

@@ -1,90 +1,60 @@
-/* global document, window */
+import {
+  ABILITY_KEYS,
+  ABILITY_LABELS,
+  ATTACK_PROFICIENCY_OPTIONS,
+  DAMAGE_ABILITY_OPTIONS,
+  DICE_BOX_MODULE_PATH,
+  DIE_OPTIONS,
+  EDITION_OPTIONS,
+  SHEET_TABS,
+  SKILL_DEFINITIONS,
+  SKILL_PROFICIENCY_OPTIONS,
+  SPELL_DAMAGE_ABILITY_OPTIONS,
+  SPELL_ROLL_MODE_OPTIONS,
+  SPELLCASTING_ABILITY_BY_CLASS,
+  STANDARD_ABILITY_ARRAY,
+} from './frontend/constants.js';
+import {
+  createBlankAbilityAssignments,
+  createDefaultAttack,
+  createDefaultCharacter,
+  createDefaultFeatureEntry,
+  createDefaultGrantedSpellEntry,
+  createDefaultInventoryEntry,
+  createDefaultSpellEntry,
+  normalizeCharacter,
+} from './frontend/character-data.js';
+import {
+  ATTUNEMENT_SLOT_COUNT,
+  canSpendItemResource,
+  extractItemCapabilities,
+  getAmmoQuantity,
+  getAmmoTypeLabel,
+  getAttunedItemCount,
+  getItemResourceSummary,
+  isItemReady,
+} from './frontend/item-capabilities.js';
+import { renderWizardModal as renderWizardModalView } from './frontend/renderers/wizard.js';
+import {
+  abilityModifier,
+  analyzeRollFormula,
+  buildFormulaWithModifier,
+  clampNumber,
+  deepClone,
+  describeRollFormula,
+  editionLabel,
+  escapeHtml,
+  formatSigned,
+  getAbilityModifierValue,
+  readFormControlValue,
+  renderMetaBits,
+  titleize,
+} from './frontend/utils.js';
 
 const appRoot = document.getElementById('app');
 const floatingRoot = ensureFloatingRoot();
 const compendiumRoot = ensureFloatingSurface('compendium-window-root');
 const diceRoot = ensureFloatingSurface('dice-toolbar-root');
-
-const ABILITY_KEYS = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
-const ABILITY_LABELS = {
-  STR: 'Strength',
-  DEX: 'Dexterity',
-  CON: 'Constitution',
-  INT: 'Intelligence',
-  WIS: 'Wisdom',
-  CHA: 'Charisma',
-};
-const SKILL_DEFINITIONS = [
-  { key: 'acrobatics', label: 'Acrobatics', ability: 'DEX' },
-  { key: 'animalHandling', label: 'Animal Handling', ability: 'WIS' },
-  { key: 'arcana', label: 'Arcana', ability: 'INT' },
-  { key: 'athletics', label: 'Athletics', ability: 'STR' },
-  { key: 'deception', label: 'Deception', ability: 'CHA' },
-  { key: 'history', label: 'History', ability: 'INT' },
-  { key: 'insight', label: 'Insight', ability: 'WIS' },
-  { key: 'intimidation', label: 'Intimidation', ability: 'CHA' },
-  { key: 'investigation', label: 'Investigation', ability: 'INT' },
-  { key: 'medicine', label: 'Medicine', ability: 'WIS' },
-  { key: 'nature', label: 'Nature', ability: 'INT' },
-  { key: 'perception', label: 'Perception', ability: 'WIS' },
-  { key: 'performance', label: 'Performance', ability: 'CHA' },
-  { key: 'persuasion', label: 'Persuasion', ability: 'CHA' },
-  { key: 'religion', label: 'Religion', ability: 'INT' },
-  { key: 'sleightOfHand', label: 'Sleight of Hand', ability: 'DEX' },
-  { key: 'stealth', label: 'Stealth', ability: 'DEX' },
-  { key: 'survival', label: 'Survival', ability: 'WIS' },
-];
-const SKILL_PROFICIENCY_OPTIONS = [
-  ['none', 'None'],
-  ['proficient', 'Proficient'],
-  ['expertise', 'Expertise'],
-];
-const ATTACK_PROFICIENCY_OPTIONS = [
-  ['none', 'None'],
-  ['proficient', 'Proficient'],
-];
-const DAMAGE_ABILITY_OPTIONS = [
-  ['none', 'No Ability'],
-  ['same', 'Attack Ability'],
-  ...ABILITY_KEYS.map((ability) => [ability, ABILITY_LABELS[ability]]),
-];
-const SPELL_DAMAGE_ABILITY_OPTIONS = [
-  ['none', 'No Ability'],
-  ['spell', 'Spell Ability'],
-  ...ABILITY_KEYS.map((ability) => [ability, ABILITY_LABELS[ability]]),
-];
-const SPELL_ROLL_MODE_OPTIONS = [
-  ['utility', 'Utility'],
-  ['attack', 'Attack Roll'],
-  ['save', 'Saving Throw'],
-];
-const SPELLCASTING_ABILITY_BY_CLASS = {
-  artificer: 'INT',
-  bard: 'CHA',
-  cleric: 'WIS',
-  druid: 'WIS',
-  paladin: 'CHA',
-  ranger: 'WIS',
-  sorcerer: 'CHA',
-  warlock: 'CHA',
-  wizard: 'INT',
-};
-const EDITION_OPTIONS = [
-  ['all', 'All Sources'],
-  ['2014', '2014 SRD'],
-  ['2024', '2024 SRD'],
-];
-const DIE_OPTIONS = [4, 6, 8, 10, 12, 20];
-const STANDARD_ABILITY_ARRAY = [15, 14, 13, 12, 10, 8];
-const SHEET_TABS = [
-  ['core', 'Core'],
-  ['combat', 'Combat'],
-  ['inventory', 'Inventory'],
-  ['spells', 'Spells'],
-  ['features', 'Features'],
-  ['notes', 'Notes'],
-];
-const DICE_BOX_MODULE_PATH = '/vendor/dice-box/dice-box.es.js';
 
 const state = {
   authMode: 'login',
@@ -164,135 +134,6 @@ function ensureFloatingSurface(id) {
   surface.className = 'floating-surface';
   floatingRoot.append(surface);
   return surface;
-}
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
-function titleize(value, fallback = 'Unassigned') {
-  const normalized = String(value || '')
-    .trim()
-    .replaceAll(/[-_]+/g, ' ');
-
-  if (!normalized) {
-    return fallback;
-  }
-
-  return normalized.replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function editionLabel(value) {
-  return EDITION_OPTIONS.find(([code]) => code === value)?.[1] || titleize(value, 'All Sources');
-}
-
-function renderMetaBits(bits) {
-  const filteredBits = bits.filter(Boolean);
-  if (filteredBits.length === 0) {
-    return '';
-  }
-
-  return filteredBits
-    .map((bit) => `<span>${escapeHtml(bit)}</span>`)
-    .join('<span class="meta-sep">&middot;</span>');
-}
-
-function getAbilityModifierValue(score) {
-  return Math.floor((Number(score || 10) - 10) / 2);
-}
-
-function abilityModifier(score) {
-  const modifier = getAbilityModifierValue(score);
-  return modifier >= 0 ? `+${modifier}` : String(modifier);
-}
-
-function clampNumber(value, minimum, maximum, fallback) {
-  const numericValue = Number(value);
-  if (!Number.isFinite(numericValue)) {
-    return fallback;
-  }
-
-  return Math.min(maximum, Math.max(minimum, numericValue));
-}
-
-function formatSigned(value) {
-  const numericValue = Number(value || 0);
-  return numericValue >= 0 ? `+${numericValue}` : String(numericValue);
-}
-
-function describeRollFormula(count, sides, modifier = 0) {
-  return `${count}d${sides}${Number(modifier) === 0 ? '' : formatSigned(modifier)}`;
-}
-
-function readFormControlValue(target) {
-  if (target.type === 'checkbox') {
-    return Boolean(target.checked);
-  }
-
-  if (target.type === 'number') {
-    return Number(target.value || 0);
-  }
-
-  return target.value;
-}
-
-function normalizeDiceExpression(expression) {
-  const normalized = String(expression || '')
-    .trim()
-    .replace(/\s+/g, '')
-    .toLowerCase();
-  if (!normalized) {
-    return '';
-  }
-
-  return normalized.replace(/^d(\d+)$/i, '1d$1');
-}
-
-function analyzeRollFormula(formula) {
-  const normalized = normalizeDiceExpression(formula);
-  if (!normalized) {
-    return null;
-  }
-
-  const terms = normalized.match(/[+-]?[^+-]+/g) || [];
-  let modifier = 0;
-  let hasDice = false;
-
-  for (const term of terms) {
-    const sign = term.startsWith('-') ? -1 : 1;
-    const raw = term.replace(/^[+-]/, '');
-    if (/^\d*d\d+$/i.test(raw)) {
-      hasDice = true;
-      continue;
-    }
-
-    if (/^\d+$/.test(raw)) {
-      modifier += sign * Number(raw);
-      continue;
-    }
-
-    return null;
-  }
-
-  return {
-    formula: normalized,
-    modifier,
-    hasDice,
-  };
-}
-
-function buildFormulaWithModifier(expression, modifier = 0) {
-  const normalizedExpression = normalizeDiceExpression(expression);
-  if (!normalizedExpression) {
-    return '';
-  }
-
-  return `${normalizedExpression}${Number(modifier) === 0 ? '' : formatSigned(modifier)}`;
 }
 
 function getStrongestAbilityKey(character) {
@@ -465,126 +306,6 @@ function ensureCompendiumPosition() {
   });
 }
 
-function createDefaultAttack() {
-  return {
-    name: '',
-    ability: 'STR',
-    proficiency: 'proficient',
-    attackBonus: 0,
-    damageDice: '1d8',
-    damageAbility: 'same',
-    damageBonus: 0,
-    sourceType: '',
-    sourceSlug: '',
-    sourceCode: '',
-    sourceName: '',
-    requiresEquipped: false,
-    notes: '',
-  };
-}
-
-function createDefaultInventoryEntry() {
-  return {
-    name: '',
-    quantity: 1,
-    equipped: false,
-    source: '',
-    description: '',
-    notes: '',
-    compendiumType: 'items',
-    slug: '',
-    code: '',
-    tags: null,
-    profile: null,
-    properties: null,
-  };
-}
-
-function createDefaultSpellEntry() {
-  return {
-    name: '',
-    level: 0,
-    source: '',
-    description: '',
-    higherLevelText: '',
-    rollMode: 'utility',
-    damageDice: '',
-    damageAbility: 'spell',
-    damageBonus: 0,
-    compendiumType: 'spells',
-    slug: '',
-    code: '',
-    attackType: '',
-    tags: null,
-    damage: null,
-  };
-}
-
-function createDefaultFeatureEntry() {
-  return {
-    name: '',
-    source: '',
-    description: '',
-    shortDescription: '',
-    featureType: '',
-    levelRequired: null,
-    compendiumType: 'features',
-    slug: '',
-    code: '',
-    effects: null,
-    tags: null,
-  };
-}
-
-function createDefaultCharacter() {
-  return {
-    name: 'Unnamed Hero',
-    edition: state.editionFilter,
-    level: 1,
-    ancestrySlug: '',
-    classSlug: '',
-    backgroundSlug: '',
-    alignment: 'True Neutral',
-    abilities: {
-      STR: 15,
-      DEX: 14,
-      CON: 13,
-      INT: 12,
-      WIS: 10,
-      CHA: 8,
-    },
-    hp: {
-      max: 10,
-      current: 10,
-      temp: 0,
-    },
-    ac: 10,
-    speed: 30,
-    initiative: 0,
-    skillRanks: {},
-    skillBonuses: {},
-    conditions: [],
-    attacks: [],
-    inventory: [],
-    spells: [],
-    spellcasting: {
-      ability: '',
-      attackBonus: 0,
-      saveDcBonus: 0,
-    },
-    features: [],
-    notes: '',
-  };
-}
-
-function deepClone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
-function createBlankAbilityAssignments() {
-  return Object.fromEntries(ABILITY_KEYS.map((ability) => [ability, null]));
-}
-
 function getCompendiumEntries(type) {
   if (!state.compendium) {
     return [];
@@ -684,6 +405,7 @@ function extractDamageBonusFromText(text) {
 }
 
 function buildInventoryEntryFromResult(result) {
+  const capabilities = extractItemCapabilities(result);
   return {
     ...createDefaultInventoryEntry(),
     name: result.name,
@@ -695,6 +417,14 @@ function buildInventoryEntryFromResult(result) {
     tags: result.tags || null,
     profile: result.profile || null,
     properties: result.properties || null,
+    attunementRequired: capabilities.attunementRequired,
+    attuned: false,
+    providesAmmoType: capabilities.providesAmmoType,
+    resource: capabilities.resource,
+    grantedSpells: capabilities.grantedSpells.map((spell) => ({
+      ...createDefaultGrantedSpellEntry(),
+      ...spell,
+    })),
   };
 }
 
@@ -808,6 +538,7 @@ function buildAttackFromItemProfile(result) {
   const attackBonus = extractAttackBonusFromText(text);
   const damageBonus = extractDamageBonusFromText(text);
   const sourceMeta = [result.sourceCode || '', getCompendiumTagYear(result) || ''].filter(Boolean).join(' ');
+  const ammoType = extractItemCapabilities(result).ammoType;
 
   return {
     ...createDefaultAttack(),
@@ -823,6 +554,8 @@ function buildAttackFromItemProfile(result) {
     sourceCode: result.code || '',
     sourceName: result.name,
     requiresEquipped: true,
+    ammoType,
+    ammoPerUse: ammoType ? 1 : 0,
     notes: [sourceMeta, rangeBits.join(' · '), getCompendiumDescription(result)].filter(Boolean).join('\n\n'),
   };
 }
@@ -964,7 +697,7 @@ function createWizardState(mode, character = null) {
   const firstAncestry = getCompendiumEntries('ancestries')[0]?.slug || '';
   const firstBackground = getCompendiumEntries('backgrounds')[0]?.slug || '';
   const draft = {
-    ...createDefaultCharacter(),
+    ...createDefaultCharacter(state.editionFilter),
     classSlug: firstClass,
     ancestrySlug: firstAncestry,
     backgroundSlug: firstBackground,
@@ -977,65 +710,6 @@ function createWizardState(mode, character = null) {
     draft,
     assignedScores: createBlankAbilityAssignments(),
     availableScores: [...STANDARD_ABILITY_ARRAY],
-  };
-}
-
-function normalizeCharacter(character) {
-  const defaults = createDefaultCharacter();
-  const data = {
-    ...defaults,
-    ...(character?.data || {}),
-  };
-
-  data.abilities = {
-    ...defaults.abilities,
-    ...(data.abilities || {}),
-  };
-  data.hp = {
-    ...defaults.hp,
-    ...(data.hp || {}),
-  };
-  data.skillRanks = {
-    ...defaults.skillRanks,
-    ...(data.skillRanks || {}),
-  };
-  data.skillBonuses = {
-    ...defaults.skillBonuses,
-    ...(data.skillBonuses || {}),
-  };
-  data.spellcasting = {
-    ...defaults.spellcasting,
-    ...(data.spellcasting || {}),
-  };
-  data.conditions = Array.isArray(data.conditions) ? data.conditions : [];
-  data.attacks = Array.isArray(data.attacks)
-    ? data.attacks.map((entry) => ({ ...createDefaultAttack(), ...(entry || {}) }))
-    : [];
-  data.inventory = Array.isArray(data.inventory)
-    ? data.inventory.map((entry) => ({ ...createDefaultInventoryEntry(), ...(entry || {}) }))
-    : [];
-  data.spells = Array.isArray(data.spells)
-    ? data.spells.map((entry) => ({ ...createDefaultSpellEntry(), ...(entry || {}) }))
-    : [];
-  data.features = Array.isArray(data.features)
-    ? data.features.map((entry) => ({ ...createDefaultFeatureEntry(), ...(entry || {}) }))
-    : [];
-  data.name = data.name || character?.name || 'Unnamed Hero';
-  data.edition = data.edition || character?.edition || state.editionFilter;
-  data.level = Number(data.level || character?.level || 1);
-  data.ancestrySlug = data.ancestrySlug || character?.ancestrySlug || '';
-  data.classSlug = data.classSlug || character?.classSlug || '';
-  data.backgroundSlug = data.backgroundSlug || character?.backgroundSlug || '';
-
-  return {
-    ...character,
-    name: data.name,
-    edition: data.edition,
-    level: data.level,
-    ancestrySlug: data.ancestrySlug,
-    classSlug: data.classSlug,
-    backgroundSlug: data.backgroundSlug,
-    data,
   };
 }
 
@@ -1606,7 +1280,7 @@ async function loadBootstrap() {
   state.users = payload.users || [];
   state.compendium = payload.compendium;
   syncDiceModels(payload.diceModels || []);
-  state.characters = (payload.characters || []).map(normalizeCharacter);
+  state.characters = (payload.characters || []).map((character) => normalizeCharacter(character, state.editionFilter));
   state.activeCharacterId =
     state.characters.find((character) => character.id === state.activeCharacterId)?.id ||
     state.characters[0]?.id ||
@@ -1729,7 +1403,30 @@ function updateListEntry(listName, index, field, value) {
     return;
   }
 
-  character.data[listName][index][field] = value;
+  const entry = character.data[listName][index];
+  if (listName === 'inventory' && field === 'attuned' && value === true && !entry.attuned) {
+    if (getAttunedItemCount(character) >= ATTUNEMENT_SLOT_COUNT) {
+      setMessage('info', `All ${ATTUNEMENT_SLOT_COUNT} attunement slots are already occupied.`);
+      return;
+    }
+    entry.attunementRequired = true;
+  }
+
+  if (listName === 'inventory' && field === 'attunementRequired' && value === false) {
+    entry.attuned = false;
+  }
+
+  const parts = String(field || '').split('.');
+  let target = entry;
+  while (parts.length > 1) {
+    const key = parts.shift();
+    if (!target[key] || typeof target[key] !== 'object') {
+      target[key] = {};
+    }
+    target = target[key];
+  }
+
+  target[parts[0]] = value;
   render();
 }
 
@@ -1744,13 +1441,13 @@ function upsertCharacterRecord(updatedCharacter) {
   state.activeCharacterId = updatedCharacter.id;
 }
 
-async function createCharacterRecord(initialData = createDefaultCharacter()) {
+async function createCharacterRecord(initialData = createDefaultCharacter(state.editionFilter)) {
   const payload = await api('/api/characters', {
     method: 'POST',
     body: JSON.stringify(initialData),
   });
 
-  const character = normalizeCharacter(payload.character);
+  const character = normalizeCharacter(payload.character, state.editionFilter);
   upsertCharacterRecord(character);
   state.sheetTab = 'core';
   setMessage('success', 'Character created.');
@@ -1762,7 +1459,7 @@ async function updateCharacterRecord(characterId, data, successMessage = 'Charac
     body: JSON.stringify(data),
   });
 
-  const updated = normalizeCharacter(payload.character);
+  const updated = normalizeCharacter(payload.character, state.editionFilter);
   upsertCharacterRecord(updated);
   state.sheetTab = 'core';
   setMessage('success', successMessage);
@@ -1818,7 +1515,157 @@ async function runCompendiumSearch() {
   }
 }
 
-function addCompendiumEntry(index, targetList = null) {
+function findSpellSearchMatch(spellName, results = []) {
+  const normalizedNeedle = String(spellName || '').trim().toLowerCase();
+  if (!normalizedNeedle) {
+    return null;
+  }
+
+  return (
+    results.find((entry) => String(entry.name || '').trim().toLowerCase() === normalizedNeedle) ||
+    results.find((entry) => String(entry.slug || '').trim().toLowerCase() === normalizedNeedle.replace(/\s+/g, '-')) ||
+    results[0] ||
+    null
+  );
+}
+
+async function hydrateGrantedSpellEntry(spellSeed, itemName) {
+  const fallback = {
+    ...createDefaultGrantedSpellEntry(),
+    ...(spellSeed || {}),
+    sourceItemName: itemName || spellSeed?.sourceItemName || '',
+  };
+  const spellName = String(spellSeed?.name || '').trim();
+  if (!spellName) {
+    return fallback;
+  }
+
+  try {
+    const payload = await api(
+      `/api/compendium/search?type=spells&q=${encodeURIComponent(spellName)}&edition=${encodeURIComponent(state.editionFilter)}&limit=8`,
+      { method: 'GET' }
+    );
+    const match = findSpellSearchMatch(spellName, payload.results || []);
+    if (!match) {
+      return fallback;
+    }
+
+    return {
+      ...createDefaultGrantedSpellEntry(),
+      ...buildSpellEntryFromResult(match),
+      ...(spellSeed || {}),
+      sourceItemName: itemName || spellSeed?.sourceItemName || '',
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+async function hydrateInventoryEntry(entry) {
+  if (!Array.isArray(entry?.grantedSpells) || entry.grantedSpells.length === 0) {
+    return entry;
+  }
+
+  return {
+    ...entry,
+    grantedSpells: await Promise.all(
+      entry.grantedSpells.map((spellSeed) => hydrateGrantedSpellEntry(spellSeed, entry.name))
+    ),
+  };
+}
+
+function getAttackAmmoType(character, attack) {
+  if (attack?.ammoType) {
+    return attack.ammoType;
+  }
+
+  const sourceItem =
+    character?.data?.inventory?.find(
+      (entry) =>
+        (attack?.sourceSlug && entry.slug === attack.sourceSlug) ||
+        (attack?.sourceCode && entry.code === attack.sourceCode) ||
+        (attack?.sourceName && entry.name === attack.sourceName)
+    ) || null;
+
+  if (!sourceItem) {
+    return '';
+  }
+
+  return extractItemCapabilities({
+    name: sourceItem.name,
+    code: sourceItem.code,
+    description: sourceItem.description,
+    fullDescription: sourceItem.description,
+    profile: sourceItem.profile,
+    properties: sourceItem.properties,
+  }).ammoType;
+}
+
+function getAttackAmmoStatus(character, attack) {
+  const ammoType = getAttackAmmoType(character, attack);
+  if (!ammoType) {
+    return {
+      available: true,
+      quantity: null,
+      perUse: 0,
+      label: '',
+      ammoType: '',
+    };
+  }
+
+  const quantity = getAmmoQuantity(character, ammoType);
+  const perUse = Math.max(1, Number(attack.ammoPerUse || 1));
+
+  return {
+    available: quantity >= perUse,
+    quantity,
+    perUse,
+    label: `${quantity} ${getAmmoTypeLabel(ammoType)}`,
+    ammoType,
+  };
+}
+
+function consumeAttackAmmo(character, attack) {
+  const ammoStatus = getAttackAmmoStatus(character, attack);
+  if (!ammoStatus.ammoType) {
+    return true;
+  }
+  if (!ammoStatus.available) {
+    return false;
+  }
+
+  let remaining = ammoStatus.perUse;
+  for (const entry of character.data.inventory) {
+    const matchesAmmo =
+      entry.providesAmmoType === ammoStatus.ammoType ||
+      entry.code === ammoStatus.ammoType ||
+      entry.slug === ammoStatus.ammoType;
+    if (!matchesAmmo || remaining <= 0) {
+      continue;
+    }
+
+    const spendable = Math.min(remaining, Number(entry.quantity || 0));
+    entry.quantity = Math.max(0, Number(entry.quantity || 0) - spendable);
+    remaining -= spendable;
+  }
+
+  return remaining === 0;
+}
+
+function spendItemResource(entry, amount = 1) {
+  if (!entry?.resource || (entry.resource.max == null && entry.resource.current == null)) {
+    return true;
+  }
+
+  if (!canSpendItemResource(entry, amount)) {
+    return false;
+  }
+
+  entry.resource.current = Math.max(0, Number(entry.resource.current ?? 0) - Number(amount || 0));
+  return true;
+}
+
+async function addCompendiumEntry(index, targetList = null) {
   const result = state.compendiumResults[index];
   const character = activeCharacter();
   if (!result || !character) {
@@ -1827,7 +1674,11 @@ function addCompendiumEntry(index, targetList = null) {
 
   const plan = buildCompendiumImportPlan(result);
   for (const operation of plan) {
-    character.data[operation.list].push(operation.entry);
+    const entry =
+      operation.list === 'inventory'
+        ? await hydrateInventoryEntry(operation.entry)
+        : operation.entry;
+    character.data[operation.list].push(entry);
   }
 
   if (!state.compendiumPinned) {
@@ -1853,6 +1704,113 @@ function toggleCondition(conditionCode) {
     ? character.data.conditions.filter((entry) => entry !== conditionCode)
     : [...character.data.conditions, conditionCode];
   render();
+}
+
+function toggleItemAttunement(index) {
+  const character = activeCharacter();
+  const entry = character?.data?.inventory?.[index];
+  if (!entry) {
+    return;
+  }
+
+  if (entry.attuned) {
+    entry.attuned = false;
+    render();
+    return;
+  }
+
+  if (getAttunedItemCount(character) >= ATTUNEMENT_SLOT_COUNT) {
+    setMessage('info', `All ${ATTUNEMENT_SLOT_COUNT} attunement slots are already occupied.`);
+    return;
+  }
+
+  entry.attunementRequired = true;
+  entry.attuned = true;
+  render();
+}
+
+async function rollAttackFromSheet(index) {
+  const character = activeCharacter();
+  const attack = character?.data?.attacks?.[index];
+  if (!character || !attack) {
+    return;
+  }
+
+  if (!isAttackAvailable(character, attack)) {
+    setMessage('info', 'Equip the source item before using this attack.');
+    return;
+  }
+
+  const ammoStatus = getAttackAmmoStatus(character, attack);
+  if (!ammoStatus.available) {
+    setMessage('info', `${attack.name || 'This attack'} needs ${getAmmoTypeLabel(ammoStatus.ammoType)} before it can be used.`);
+    return;
+  }
+
+  if (!consumeAttackAmmo(character, attack)) {
+    setMessage('info', `${attack.name || 'This attack'} could not spend the required ammunition.`);
+    return;
+  }
+
+  render();
+  await rollDiceFormula(
+    describeRollFormula(1, 20, getAttackRollModifier(character, attack)),
+    `${attack.name || 'Attack'} Attack`
+  );
+}
+
+async function castItemSpellFromSheet(itemIndex, spellIndex) {
+  const character = activeCharacter();
+  const entry = character?.data?.inventory?.[itemIndex];
+  let spell = entry?.grantedSpells?.[spellIndex];
+  if (!character || !entry || !spell) {
+    return;
+  }
+
+  if (!spell.slug && !spell.code && !spell.description) {
+    spell = await hydrateGrantedSpellEntry(spell, entry.name);
+    entry.grantedSpells[spellIndex] = spell;
+  }
+
+  if (!entry.equipped) {
+    setMessage('info', `${entry.name || 'This item'} must be equipped before it can cast spells.`);
+    return;
+  }
+
+  if (entry.attunementRequired && !entry.attuned) {
+    setMessage('info', `${entry.name || 'This item'} must be attuned before it can cast spells.`);
+    return;
+  }
+
+  const cost = Math.max(1, Number(spell.chargeCost || 1));
+  if (!spendItemResource(entry, cost)) {
+    setMessage('info', `${entry.name || 'This item'} does not have enough ${entry.resource?.label || 'uses'} remaining.`);
+    return;
+  }
+
+  render();
+  const hasTrackedResource = entry.resource && (entry.resource.max != null || entry.resource.current != null);
+
+  if ((spell.rollMode || 'utility') === 'attack') {
+    await rollDiceFormula(
+      describeRollFormula(1, 20, getSpellAttackModifier(character)),
+      `${spell.name || 'Item Spell'} Attack`
+    );
+    return;
+  }
+
+  if ((spell.rollMode || 'utility') === 'save') {
+    setMessage(
+      'success',
+      `${spell.name || 'Spell'} cast from ${entry.name || 'item'}. Save DC ${getSpellSaveDc(character)}.`
+    );
+    return;
+  }
+
+  setMessage(
+    'success',
+    `${spell.name || 'Spell'} cast from ${entry.name || 'item'}${hasTrackedResource ? ` for ${cost} ${entry.resource?.label || 'use'}.` : '.'}`
+  );
 }
 
 async function updateUserRoleRequest(userId, role) {
@@ -2013,6 +1971,84 @@ function renderRouteChips(labels) {
     .join('');
 }
 
+function renderAttunementSlots(character) {
+  const attunedItems = character.data.inventory.filter((entry) => entry.attuned).slice(0, ATTUNEMENT_SLOT_COUNT);
+
+  return `
+    <div class="attunement-strip">
+      <div>
+        <div class="section-title">Attunement</div>
+        <div class="muted">${escapeHtml(String(getAttunedItemCount(character)))} / ${escapeHtml(String(ATTUNEMENT_SLOT_COUNT))} slots used</div>
+      </div>
+      <div class="attunement-strip__slots">
+        ${Array.from({ length: ATTUNEMENT_SLOT_COUNT }, (_, index) => {
+          const item = attunedItems[index];
+          return `
+            <div class="attunement-slot ${item ? 'active' : ''}">
+              <span class="attunement-slot__index">${index + 1}</span>
+              <span>${escapeHtml(item?.name || 'Open')}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderItemSpellButtons(character, entry, inventoryIndex) {
+  if (!Array.isArray(entry.grantedSpells) || entry.grantedSpells.length === 0) {
+    return '';
+  }
+
+  const ready = isItemReady(entry);
+
+  return `
+    <div class="item-spell-strip">
+      ${entry.grantedSpells
+        .map((spell, spellIndex) => {
+          const cost = Math.max(1, Number(spell.chargeCost || 1));
+          const damageFormula = buildFormulaWithModifier(spell.damageDice, getSpellDamageModifier(character, spell));
+          const primaryLabel =
+            spell.rollMode === 'attack'
+              ? `Cast ${formatSigned(getSpellAttackModifier(character))}`
+              : spell.rollMode === 'save'
+                ? `Cast DC ${getSpellSaveDc(character)}`
+                : `Cast`;
+          const canCast = ready && canSpendItemResource(entry, cost);
+
+          return `
+            <div class="item-spell-chip">
+              <span class="item-spell-chip__name">${escapeHtml(spell.name || 'Item Spell')}</span>
+              <div class="button-row button-row--tight">
+                <button
+                  class="button subtle button--small"
+                  data-action="cast-item-spell"
+                  data-index="${inventoryIndex}"
+                  data-spell-index="${spellIndex}"
+                  ${canCast ? '' : 'disabled'}
+                >
+                  ${escapeHtml(primaryLabel)}${cost > 0 ? ` (${cost})` : ''}
+                </button>
+                ${
+                  damageFormula
+                    ? renderRollActionButton({
+                        label: `${spell.name || 'Item Spell'} Damage`,
+                        formula: damageFormula,
+                        text: `Damage ${damageFormula}`,
+                        classes: 'button--small',
+                        disabled: !ready,
+                      })
+                    : ''
+                }
+              </div>
+            </div>
+          `;
+        })
+        .join('')}
+    </div>
+  `;
+}
+
 function renderInventorySection(character) {
   const equippedCount = character.data.inventory.filter((entry) => entry.equipped).length;
   return `
@@ -2024,6 +2060,7 @@ function renderInventorySection(character) {
         </div>
         <button class="button subtle" data-action="add-entry" data-list="inventory">Add Item</button>
       </div>
+      ${renderAttunementSlots(character)}
       <div class="item-list">
         ${
           character.data.inventory.length === 0
@@ -2036,12 +2073,22 @@ function renderInventorySection(character) {
                         <strong>${escapeHtml(entry.name || 'Item')}</strong>
                         <div class="muted">${renderMetaBits([
                           entry.equipped ? 'Equipped' : 'Stored',
-                          entry.quantity > 1 ? `Qty ${entry.quantity}` : '',
+                          entry.attunementRequired ? entry.attuned ? 'Attuned' : 'Needs attunement' : '',
+                          entry.quantity !== 1 ? `Qty ${entry.quantity}` : '',
+                          getItemResourceSummary(entry),
+                          entry.grantedSpells?.length ? `${entry.grantedSpells.length} item spell${entry.grantedSpells.length === 1 ? '' : 's'}` : '',
+                          entry.providesAmmoType ? `${getAmmoTypeLabel(entry.providesAmmoType)} stock` : '',
                           entry.source || '',
                         ])}</div>
+                        ${renderItemSpellButtons(character, entry, index)}
                       </div>
                       <div class="button-row button-row--tight">
                         <button class="button subtle button--small" data-action="toggle-equip" data-index="${index}">${entry.equipped ? 'Unequip' : 'Equip'}</button>
+                        ${
+                          entry.attunementRequired
+                            ? `<button class="button subtle button--small" data-action="toggle-attunement" data-index="${index}">${entry.attuned ? 'Unattune' : 'Attune'}</button>`
+                            : ''
+                        }
                         <button class="button subtle button--small" data-action="open-sheet-entry" data-list="inventory" data-index="${index}">View</button>
                         <button class="button danger button--small" data-action="remove-entry" data-list="inventory" data-index="${index}">Remove</button>
                       </div>
@@ -2121,12 +2168,15 @@ function renderAttackSection(character) {
                 .map((entry, index) => {
                   const attackModifier = getAttackRollModifier(character, entry);
                   const damageFormula = buildFormulaWithModifier(entry.damageDice, getAttackDamageModifier(character, entry));
-                  const available = isAttackAvailable(character, entry);
+                  const equipAvailable = isAttackAvailable(character, entry);
+                  const ammoStatus = getAttackAmmoStatus(character, entry);
+                  const available = equipAvailable && ammoStatus.available;
                   const sourceItem = findInventorySourceForAttack(character, entry);
                   const statusBits = [
                     `${ABILITY_LABELS[getAttackAbilityKey(entry)]} ${formatSigned(attackModifier)}`,
                     damageFormula ? `Damage ${damageFormula}` : '',
                     entry.requiresEquipped ? sourceItem?.equipped ? 'Equipped' : 'Needs equip' : '',
+                    ammoStatus.label,
                   ].filter(Boolean);
 
                   return `
@@ -2136,24 +2186,25 @@ function renderAttackSection(character) {
                         <div class="muted">${renderMetaBits(statusBits)}</div>
                       </div>
                       <div class="button-row button-row--tight">
-                          ${renderRollActionButton({
-                            label: `${entry.name || 'Attack'} Attack`,
-                            formula: describeRollFormula(1, 20, attackModifier),
-                            text: `Attack ${formatSigned(attackModifier)}`,
-                            classes: 'button--small',
-                            disabled: !available,
-                          })}
-                          ${
-                            damageFormula
-                              ? renderRollActionButton({
-                                  label: `${entry.name || 'Attack'} Damage`,
-                                  formula: damageFormula,
-                                  text: `Damage ${damageFormula}`,
-                                  classes: 'button--small',
-                                  disabled: !available,
-                                })
-                              : ''
-                          }
+                          <button
+                            class="button subtle button--small"
+                            data-action="roll-attack"
+                            data-index="${index}"
+                            ${available ? '' : 'disabled'}
+                          >
+                            ${escapeHtml(`Attack ${formatSigned(attackModifier)}`)}
+                          </button>
+                            ${
+                              damageFormula
+                                ? renderRollActionButton({
+                                    label: `${entry.name || 'Attack'} Damage`,
+                                    formula: damageFormula,
+                                    text: `Damage ${damageFormula}`,
+                                    classes: 'button--small',
+                                    disabled: !equipAvailable,
+                                  })
+                                : ''
+                            }
                           <button class="button subtle button--small" data-action="open-sheet-entry" data-list="attacks" data-index="${index}">View</button>
                           <button class="button danger button--small" data-action="remove-entry" data-list="attacks" data-index="${index}">Remove</button>
                         </div>
@@ -2216,6 +2267,54 @@ function renderSpellcastingPanel(character) {
   `;
 }
 
+function renderItemCastingPanel(character) {
+  const itemsWithSpells = character.data.inventory
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => Array.isArray(entry.grantedSpells) && entry.grantedSpells.length > 0);
+
+  return `
+    <section class="editor-card sheet-card sheet-card--wide">
+      <div class="panel-header">
+        <div>
+          <div class="section-title">Item Casting</div>
+          <div class="muted">Equipped item spells spend their own charges or uses. Attunement is enforced when the item requires it.</div>
+        </div>
+      </div>
+      <div class="item-list">
+        ${
+          itemsWithSpells.length === 0
+            ? '<div class="empty-card">No item-granted spells detected yet. Import a magical item such as a staff, wand, or charged relic.</div>'
+            : itemsWithSpells
+                .map(({ entry, index }) => {
+                  const ready = isItemReady(entry);
+                  const statusBits = [
+                    entry.equipped ? 'Equipped' : 'Stored',
+                    entry.attunementRequired ? entry.attuned ? 'Attuned' : 'Needs attunement' : '',
+                    getItemResourceSummary(entry),
+                    entry.resource?.recharge || '',
+                  ].filter(Boolean);
+
+                  return `
+                    <div class="entry sheet-entry-row">
+                      <div class="sheet-entry-row__copy">
+                        <strong>${escapeHtml(entry.name || 'Item')}</strong>
+                        <div class="muted">${renderMetaBits(statusBits)}</div>
+                        ${renderItemSpellButtons(character, entry, index)}
+                      </div>
+                      <div class="button-row button-row--tight">
+                        <button class="button subtle button--small" data-action="open-sheet-entry" data-list="inventory" data-index="${index}">View</button>
+                        ${!ready ? '<span class="roll-badge">Ready item to cast</span>' : ''}
+                      </div>
+                    </div>
+                  `;
+                })
+                .join('')
+        }
+      </div>
+    </section>
+  `;
+}
+
 function renderSpellSection(character) {
   const spellAttackModifier = getSpellAttackModifier(character);
   const spellSaveDc = getSpellSaveDc(character);
@@ -2223,6 +2322,7 @@ function renderSpellSection(character) {
   return `
     <div class="sheet-panel-grid">
       ${renderSpellcastingPanel(character)}
+      ${renderItemCastingPanel(character)}
       <section class="editor-card editor-card--section droppable-zone sheet-card sheet-card--wide" data-dropzone="spells">
         <div class="panel-header">
           <div>
@@ -2359,9 +2459,37 @@ function renderSheetEntryModal() {
           <input type="checkbox" data-list="inventory" data-index="${index}" data-field="equipped" ${entry.equipped ? 'checked' : ''} />
           <span>Equipped</span>
         </label>
+        <label class="field field--checkbox">
+          <input type="checkbox" data-list="inventory" data-index="${index}" data-field="attunementRequired" ${entry.attunementRequired ? 'checked' : ''} />
+          <span>Requires attunement</span>
+        </label>
+        <label class="field field--checkbox">
+          <input type="checkbox" data-list="inventory" data-index="${index}" data-field="attuned" ${entry.attuned ? 'checked' : ''} />
+          <span>Attuned</span>
+        </label>
         <label class="field sheet-entry-modal__full">
           <span class="label">Source</span>
           <input class="input" data-list="inventory" data-index="${index}" data-field="source" value="${escapeHtml(entry.source || '')}" />
+        </label>
+        <label class="field">
+          <span class="label">Ammo Type</span>
+          <input class="input" data-list="inventory" data-index="${index}" data-field="providesAmmoType" value="${escapeHtml(entry.providesAmmoType || '')}" placeholder="arrow" />
+        </label>
+        <label class="field">
+          <span class="label">Resource Label</span>
+          <input class="input" data-list="inventory" data-index="${index}" data-field="resource.label" value="${escapeHtml(entry.resource?.label || '')}" placeholder="Charges" />
+        </label>
+        <label class="field">
+          <span class="label">Resource Max</span>
+          <input class="input" type="number" min="0" data-list="inventory" data-index="${index}" data-field="resource.max" value="${escapeHtml(String(entry.resource?.max ?? ''))}" />
+        </label>
+        <label class="field">
+          <span class="label">Resource Current</span>
+          <input class="input" type="number" min="0" data-list="inventory" data-index="${index}" data-field="resource.current" value="${escapeHtml(String(entry.resource?.current ?? ''))}" />
+        </label>
+        <label class="field sheet-entry-modal__full">
+          <span class="label">Recharge</span>
+          <input class="input" data-list="inventory" data-index="${index}" data-field="resource.recharge" value="${escapeHtml(entry.resource?.recharge || '')}" placeholder="Regains 1d6 + 4 at dawn" />
         </label>
         <label class="field sheet-entry-modal__full">
           <span class="label">Description</span>
@@ -2371,6 +2499,19 @@ function renderSheetEntryModal() {
           <span class="label">Notes</span>
           <textarea class="textarea textarea--compact" data-list="inventory" data-index="${index}" data-field="notes">${escapeHtml(entry.notes || '')}</textarea>
         </label>
+        ${
+          entry.grantedSpells?.length
+            ? `
+              <div class="sheet-entry-modal__full stack stack--section-gap">
+                <div>
+                  <div class="section-title">Item Spells</div>
+                  <div class="muted">Casting uses this item's own charges or uses.</div>
+                </div>
+                ${renderItemSpellButtons(activeCharacter(), entry, index)}
+              </div>
+            `
+            : ''
+        }
       </div>
     `;
   } else if (listName === 'spells') {
@@ -2488,6 +2629,14 @@ function renderSheetEntryModal() {
         <label class="field field--checkbox">
           <input type="checkbox" data-list="attacks" data-index="${index}" data-field="requiresEquipped" ${entry.requiresEquipped ? 'checked' : ''} />
           <span>Requires equipped item</span>
+        </label>
+        <label class="field">
+          <span class="label">Ammo Type</span>
+          <input class="input" data-list="attacks" data-index="${index}" data-field="ammoType" value="${escapeHtml(entry.ammoType || '')}" placeholder="arrow" />
+        </label>
+        <label class="field">
+          <span class="label">Ammo / Attack</span>
+          <input class="input" type="number" min="0" data-list="attacks" data-index="${index}" data-field="ammoPerUse" value="${escapeHtml(String(Number(entry.ammoPerUse || 0)))}" />
         </label>
         <label class="field sheet-entry-modal__full">
           <span class="label">Notes</span>
@@ -3024,210 +3173,15 @@ function renderCreateFlowModal() {
 }
 
 function renderWizardModal() {
-  const wizard = state.wizard;
-  if (!wizard) {
-    return '';
-  }
-
-  const steps = getWizardSteps();
-  const isLastStep = wizard.step === steps.length - 1;
-  const classEntry = getCompendiumEntryBySlug('classes', wizard.draft.classSlug);
-  const ancestryEntry = getCompendiumEntryBySlug('ancestries', wizard.draft.ancestrySlug);
-  const backgroundEntry = getCompendiumEntryBySlug('backgrounds', wizard.draft.backgroundSlug);
-  let content;
-
-  if (wizard.mode === 'levelup') {
-    content =
-      wizard.step === 0
-        ? `
-            <div class="wizard-step">
-              <div class="wizard-step__hero">
-                <div class="wizard-levelup__delta">${escapeHtml(String(wizard.draft.level))} -&gt; ${escapeHtml(String(wizard.nextLevel))}</div>
-                <div class="muted">${escapeHtml(titleize(wizard.draft.classSlug, 'Adventurer'))} advancement for ${escapeHtml(wizard.characterName)}.</div>
-              </div>
-              <div class="wizard-form-grid wizard-form-grid--two">
-                <label class="field">
-                  <span class="label">HP Gain</span>
-                  <input class="input" id="wizard-hp-gain" type="number" min="1" value="${escapeHtml(String(wizard.hpGain))}" />
-                </label>
-                <div class="wizard-review-card">
-                  <div class="wizard-review-card__label">Recommended</div>
-                  <div class="wizard-review-card__value">${escapeHtml(String(Math.max(1, Math.floor(getClassHitDie(wizard.draft.classSlug) / 2) + 1 + getAbilityModifierValue(wizard.draft.abilities.CON))))}</div>
-                  <div class="muted">Average hit die gain with Constitution applied.</div>
-                </div>
-              </div>
-            </div>
-          `
-        : `
-            <div class="wizard-step">
-              <div class="wizard-review-grid">
-                <div class="wizard-review-card">
-                  <div class="wizard-review-card__label">New Level</div>
-                  <div class="wizard-review-card__value">${escapeHtml(String(wizard.nextLevel))}</div>
-                </div>
-                <div class="wizard-review-card">
-                  <div class="wizard-review-card__label">HP Max</div>
-                  <div class="wizard-review-card__value">${escapeHtml(String(Number(wizard.draft.hp.max) + Number(wizard.hpGain)))}</div>
-                </div>
-                <div class="wizard-review-card">
-                  <div class="wizard-review-card__label">HP Current</div>
-                  <div class="wizard-review-card__value">${escapeHtml(String(Math.min(Number(wizard.draft.hp.max) + Number(wizard.hpGain), Number(wizard.draft.hp.current) + Number(wizard.hpGain))))}</div>
-                </div>
-              </div>
-              <p class="muted wizard-step__copy">Apply the level increase, then continue editing the live sheet directly.</p>
-            </div>
-          `;
-  } else if (wizard.step === 0) {
-    content = `
-      <div class="wizard-step">
-        <div class="wizard-form-grid wizard-form-grid--two">
-          <label class="field">
-            <span class="label">Character Name</span>
-            <input class="input" data-wizard-bind="name" value="${escapeHtml(wizard.draft.name)}" placeholder="Aldric Stormveil" />
-          </label>
-          <label class="field">
-            <span class="label">Alignment</span>
-            <input class="input" data-wizard-bind="alignment" value="${escapeHtml(wizard.draft.alignment)}" />
-          </label>
-          <label class="field wizard-form-grid__full">
-            <span class="label">Edition</span>
-            <select class="select" data-wizard-bind="edition">
-              ${EDITION_OPTIONS.map(([value, label]) => `<option value="${value}" ${wizard.draft.edition === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
-            </select>
-          </label>
-        </div>
-      </div>
-    `;
-  } else if (wizard.step === 1) {
-    content = `
-      <div class="wizard-step">
-        <div class="wizard-form-grid wizard-form-grid--three">
-          <label class="field">
-            <span class="label">Class</span>
-            <select class="select" data-wizard-bind="classSlug">
-              ${getCompendiumEntries('classes').map((entry) => `<option value="${escapeHtml(entry.slug)}" ${wizard.draft.classSlug === entry.slug ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}
-            </select>
-          </label>
-          <label class="field">
-            <span class="label">Ancestry</span>
-            <select class="select" data-wizard-bind="ancestrySlug">
-              ${getCompendiumEntries('ancestries').map((entry) => `<option value="${escapeHtml(entry.slug)}" ${wizard.draft.ancestrySlug === entry.slug ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}
-            </select>
-          </label>
-          <label class="field">
-            <span class="label">Background</span>
-            <select class="select" data-wizard-bind="backgroundSlug">
-              ${getCompendiumEntries('backgrounds').map((entry) => `<option value="${escapeHtml(entry.slug)}" ${wizard.draft.backgroundSlug === entry.slug ? 'selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}
-            </select>
-          </label>
-        </div>
-        <div class="wizard-review-grid">
-          <div class="wizard-review-card">
-            <div class="wizard-review-card__label">Hit Die</div>
-            <div class="wizard-review-card__value">d${escapeHtml(String(classEntry?.hitDie || 8))}</div>
-            <div class="muted">${escapeHtml(classEntry?.name || 'Class')}</div>
-          </div>
-          <div class="wizard-review-card">
-            <div class="wizard-review-card__label">Ancestry</div>
-            <div class="wizard-review-card__value">${escapeHtml(ancestryEntry?.name || 'Choose')}</div>
-          </div>
-          <div class="wizard-review-card">
-            <div class="wizard-review-card__label">Background</div>
-            <div class="wizard-review-card__value">${escapeHtml(backgroundEntry?.name || 'Choose')}</div>
-          </div>
-        </div>
-      </div>
-    `;
-  } else if (wizard.step === 2) {
-    content = `
-      <div class="wizard-step">
-        <div class="wizard-scores-rail">
-          ${wizard.availableScores.map((score) => `<span class="wizard-score-pill">${escapeHtml(String(score))}</span>`).join('')}
-          ${wizard.availableScores.length === 0 ? '<span class="muted">All standard array values assigned.</span>' : ''}
-        </div>
-        <div class="wizard-ability-grid">
-          ${ABILITY_KEYS.map((ability) => `
-            <div class="wizard-ability-card">
-              <div class="wizard-ability-card__label">${escapeHtml(ABILITY_LABELS[ability])}</div>
-              <div class="wizard-ability-card__value">${escapeHtml(String(wizard.assignedScores[ability] ?? '--'))}</div>
-              <div class="wizard-ability-card__actions">
-                ${wizard.availableScores.map((score) => `<button class="wizard-score-button" data-action="wizard-score" data-ability="${ability}" data-score="${score}">${escapeHtml(String(score))}</button>`).join('')}
-                ${wizard.assignedScores[ability] != null ? `<button class="wizard-score-button wizard-score-button--clear" data-action="wizard-score-clear" data-ability="${ability}">Clear</button>` : ''}
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    `;
-  } else if (wizard.step === 3) {
-    content = `
-      <div class="wizard-step">
-        <div class="panel-header">
-          <div>
-            <div class="section-title">Starting Combat Profile</div>
-            <div class="muted">Use the recommended class-and-ability defaults, or override them here.</div>
-          </div>
-          <button class="button subtle" data-action="wizard-recommend-stats">Apply Recommended</button>
-        </div>
-        <div class="wizard-form-grid wizard-form-grid--three">
-          <label class="field"><span class="label">Level</span><input class="input" type="number" min="1" max="20" data-wizard-bind="level" value="${escapeHtml(String(wizard.draft.level))}" /></label>
-          <label class="field"><span class="label">HP Max</span><input class="input" type="number" min="1" data-wizard-bind="hp.max" value="${escapeHtml(String(wizard.draft.hp.max))}" /></label>
-          <label class="field"><span class="label">HP Current</span><input class="input" type="number" min="0" data-wizard-bind="hp.current" value="${escapeHtml(String(wizard.draft.hp.current))}" /></label>
-          <label class="field"><span class="label">Temp HP</span><input class="input" type="number" min="0" data-wizard-bind="hp.temp" value="${escapeHtml(String(wizard.draft.hp.temp || 0))}" /></label>
-          <label class="field"><span class="label">Armor Class</span><input class="input" type="number" min="0" data-wizard-bind="ac" value="${escapeHtml(String(wizard.draft.ac))}" /></label>
-          <label class="field"><span class="label">Speed</span><input class="input" type="number" min="0" data-wizard-bind="speed" value="${escapeHtml(String(wizard.draft.speed))}" /></label>
-          <label class="field wizard-form-grid__half"><span class="label">Initiative</span><input class="input" type="number" min="-20" max="20" data-wizard-bind="initiative" value="${escapeHtml(String(wizard.draft.initiative))}" /></label>
-        </div>
-      </div>
-    `;
-  } else {
-    content = `
-      <div class="wizard-step">
-        <div class="wizard-review-grid">
-          <div class="wizard-review-card">
-            <div class="wizard-review-card__label">Name</div>
-            <div class="wizard-review-card__value">${escapeHtml(wizard.draft.name)}</div>
-          </div>
-          <div class="wizard-review-card">
-            <div class="wizard-review-card__label">Lineage</div>
-            <div class="wizard-review-card__value">${escapeHtml([ancestryEntry?.name || '', classEntry?.name || '', backgroundEntry?.name || ''].filter(Boolean).join(' / '))}</div>
-          </div>
-          <div class="wizard-review-card">
-            <div class="wizard-review-card__label">Combat</div>
-            <div class="wizard-review-card__value">${escapeHtml(`${wizard.draft.hp.current}/${wizard.draft.hp.max} HP / AC ${wizard.draft.ac}`)}</div>
-          </div>
-        </div>
-        <div class="summary-grid">
-          ${renderSummaryCards({ data: wizard.draft, ownerDisplayName: '', edition: wizard.draft.edition, name: wizard.draft.name, level: wizard.draft.level, ancestrySlug: wizard.draft.ancestrySlug, classSlug: wizard.draft.classSlug, backgroundSlug: wizard.draft.backgroundSlug })}
-        </div>
-      </div>
-    `;
-  }
-
-  return `
-    <div class="modal-overlay">
-      <section class="modal-panel modal-panel--wizard">
-        <div class="modal-panel__header">
-          <div>
-            <div class="section-title">${wizard.mode === 'levelup' ? 'Level Up Wizard' : 'Character Wizard'}</div>
-            <h3 class="modal-title">${wizard.mode === 'levelup' ? escapeHtml(wizard.characterName) : 'Build a character step by step'}</h3>
-          </div>
-          <button class="modal-close" data-action="close-wizard">&times;</button>
-        </div>
-        <div class="wizard-progress" style="--wizard-steps:${steps.length}">
-          ${steps.map((step, index) => `<div class="wizard-progress__step ${wizard.step === index ? 'active' : wizard.step > index ? 'complete' : ''}">${escapeHtml(`${index + 1}. ${step}`)}</div>`).join('')}
-        </div>
-        <div class="modal-panel__body">
-          ${content}
-        </div>
-        <div class="modal-panel__footer">
-          <button class="button" data-action="close-wizard">Cancel</button>
-          ${wizard.step > 0 ? '<button class="button subtle" data-action="wizard-prev">Back</button>' : ''}
-          <button class="button primary" data-action="wizard-next" ${canAdvanceWizard() ? '' : 'disabled'}>${isLastStep ? wizard.mode === 'levelup' ? 'Apply Level' : 'Create Character' : 'Next'}</button>
-        </div>
-      </section>
-    </div>
-  `;
+  return renderWizardModalView({
+    wizard: state.wizard,
+    steps: getWizardSteps(),
+    canAdvance: canAdvanceWizard(),
+    getCompendiumEntries,
+    getCompendiumEntryBySlug,
+    getClassHitDie,
+    renderSummaryCards,
+  });
 }
 
 function renderCompendiumDetail() {
@@ -3573,7 +3527,7 @@ async function handleActionClick(event) {
         render();
         break;
       case 'add-compendium':
-        addCompendiumEntry(Number(target.dataset.index));
+        await addCompendiumEntry(Number(target.dataset.index));
         break;
       case 'toggle-condition':
         toggleCondition(target.dataset.condition);
@@ -3646,6 +3600,15 @@ async function handleActionClick(event) {
         render();
         break;
       }
+      case 'toggle-attunement':
+        toggleItemAttunement(Number(target.dataset.index));
+        break;
+      case 'roll-attack':
+        await rollAttackFromSheet(Number(target.dataset.index));
+        break;
+      case 'cast-item-spell':
+        await castItemSpellFromSheet(Number(target.dataset.index), Number(target.dataset.spellIndex));
+        break;
       case 'roll-sheet-formula':
         await rollDiceFormula(target.dataset.formula, target.dataset.label || 'Sheet Roll');
         break;
@@ -3718,7 +3681,7 @@ function handleSheetDragOver(event) {
   event.dataTransfer.dropEffect = 'copy';
 }
 
-function handleSheetDrop(event) {
+async function handleSheetDrop(event) {
   const dropZone = event.target.closest('[data-dropzone]');
   if (!dropZone) {
     return;
@@ -3729,7 +3692,7 @@ function handleSheetDrop(event) {
   try {
     const payload = JSON.parse(event.dataTransfer.getData('text/plain') || '{}');
     if (Number.isInteger(payload.compendiumIndex)) {
-      addCompendiumEntry(payload.compendiumIndex, dropZone.dataset.dropzone);
+      await addCompendiumEntry(payload.compendiumIndex, dropZone.dataset.dropzone);
     }
   } catch {
     // Ignore invalid drag payloads.

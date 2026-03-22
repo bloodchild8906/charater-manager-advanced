@@ -611,7 +611,10 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    if (request.method === 'GET' && (pathname === '/app.js' || pathname === '/styles.css')) {
+    if (
+      request.method === 'GET' &&
+      (pathname === '/app.js' || pathname === '/styles.css' || pathname.startsWith('/frontend/'))
+    ) {
       await serveStaticFile(response, pathname.slice(1));
       return;
     }
