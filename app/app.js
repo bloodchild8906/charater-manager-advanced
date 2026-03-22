@@ -14,6 +14,61 @@ const ABILITY_LABELS = {
   WIS: 'Wisdom',
   CHA: 'Charisma',
 };
+const SKILL_DEFINITIONS = [
+  { key: 'acrobatics', label: 'Acrobatics', ability: 'DEX' },
+  { key: 'animalHandling', label: 'Animal Handling', ability: 'WIS' },
+  { key: 'arcana', label: 'Arcana', ability: 'INT' },
+  { key: 'athletics', label: 'Athletics', ability: 'STR' },
+  { key: 'deception', label: 'Deception', ability: 'CHA' },
+  { key: 'history', label: 'History', ability: 'INT' },
+  { key: 'insight', label: 'Insight', ability: 'WIS' },
+  { key: 'intimidation', label: 'Intimidation', ability: 'CHA' },
+  { key: 'investigation', label: 'Investigation', ability: 'INT' },
+  { key: 'medicine', label: 'Medicine', ability: 'WIS' },
+  { key: 'nature', label: 'Nature', ability: 'INT' },
+  { key: 'perception', label: 'Perception', ability: 'WIS' },
+  { key: 'performance', label: 'Performance', ability: 'CHA' },
+  { key: 'persuasion', label: 'Persuasion', ability: 'CHA' },
+  { key: 'religion', label: 'Religion', ability: 'INT' },
+  { key: 'sleightOfHand', label: 'Sleight of Hand', ability: 'DEX' },
+  { key: 'stealth', label: 'Stealth', ability: 'DEX' },
+  { key: 'survival', label: 'Survival', ability: 'WIS' },
+];
+const SKILL_PROFICIENCY_OPTIONS = [
+  ['none', 'None'],
+  ['proficient', 'Proficient'],
+  ['expertise', 'Expertise'],
+];
+const ATTACK_PROFICIENCY_OPTIONS = [
+  ['none', 'None'],
+  ['proficient', 'Proficient'],
+];
+const DAMAGE_ABILITY_OPTIONS = [
+  ['none', 'No Ability'],
+  ['same', 'Attack Ability'],
+  ...ABILITY_KEYS.map((ability) => [ability, ABILITY_LABELS[ability]]),
+];
+const SPELL_DAMAGE_ABILITY_OPTIONS = [
+  ['none', 'No Ability'],
+  ['spell', 'Spell Ability'],
+  ...ABILITY_KEYS.map((ability) => [ability, ABILITY_LABELS[ability]]),
+];
+const SPELL_ROLL_MODE_OPTIONS = [
+  ['utility', 'Utility'],
+  ['attack', 'Attack Roll'],
+  ['save', 'Saving Throw'],
+];
+const SPELLCASTING_ABILITY_BY_CLASS = {
+  artificer: 'INT',
+  bard: 'CHA',
+  cleric: 'WIS',
+  druid: 'WIS',
+  paladin: 'CHA',
+  ranger: 'WIS',
+  sorcerer: 'CHA',
+  warlock: 'CHA',
+  wizard: 'INT',
+};
 const EDITION_OPTIONS = [
   ['all', 'All Sources'],
   ['2014', '2014 SRD'],
@@ -63,6 +118,7 @@ const state = {
   message: null,
   createFlowOpen: false,
   wizard: null,
+  sheetEntryModal: null,
   dice: {
     open: false,
     count: 1,
@@ -173,6 +229,190 @@ function describeRollFormula(count, sides, modifier = 0) {
   return `${count}d${sides}${Number(modifier) === 0 ? '' : formatSigned(modifier)}`;
 }
 
+function readFormControlValue(target) {
+  if (target.type === 'checkbox') {
+    return Boolean(target.checked);
+  }
+
+  if (target.type === 'number') {
+    return Number(target.value || 0);
+  }
+
+  return target.value;
+}
+
+function normalizeDiceExpression(expression) {
+  const normalized = String(expression || '')
+    .trim()
+    .replace(/\s+/g, '')
+    .toLowerCase();
+  if (!normalized) {
+    return '';
+  }
+
+  return normalized.replace(/^d(\d+)$/i, '1d$1');
+}
+
+function analyzeRollFormula(formula) {
+  const normalized = normalizeDiceExpression(formula);
+  if (!normalized) {
+    return null;
+  }
+
+  const terms = normalized.match(/[+-]?[^+-]+/g) || [];
+  let modifier = 0;
+  let hasDice = false;
+
+  for (const term of terms) {
+    const sign = term.startsWith('-') ? -1 : 1;
+    const raw = term.replace(/^[+-]/, '');
+    if (/^\d*d\d+$/i.test(raw)) {
+      hasDice = true;
+      continue;
+    }
+
+    if (/^\d+$/.test(raw)) {
+      modifier += sign * Number(raw);
+      continue;
+    }
+
+    return null;
+  }
+
+  return {
+    formula: normalized,
+    modifier,
+    hasDice,
+  };
+}
+
+function buildFormulaWithModifier(expression, modifier = 0) {
+  const normalizedExpression = normalizeDiceExpression(expression);
+  if (!normalizedExpression) {
+    return '';
+  }
+
+  return `${normalizedExpression}${Number(modifier) === 0 ? '' : formatSigned(modifier)}`;
+}
+
+function getStrongestAbilityKey(character) {
+  return ABILITY_KEYS.reduce((bestKey, currentKey) =>
+    Number(character.data.abilities[currentKey] || 0) > Number(character.data.abilities[bestKey] || 0)
+      ? currentKey
+      : bestKey
+  );
+}
+
+function getProficiencyBonus(character) {
+  const level = clampNumber(character?.data?.level ?? character?.level ?? 1, 1, 20, 1);
+  return Math.floor((level - 1) / 4) + 2;
+}
+
+function getProficiencyAdjustment(rank, proficiencyBonus) {
+  if (rank === 'expertise') {
+    return proficiencyBonus * 2;
+  }
+
+  if (rank === 'proficient') {
+    return proficiencyBonus;
+  }
+
+  if (rank === 'half') {
+    return Math.floor(proficiencyBonus / 2);
+  }
+
+  return 0;
+}
+
+function getSkillDefinition(skillKey) {
+  return SKILL_DEFINITIONS.find((skill) => skill.key === skillKey) || null;
+}
+
+function getSkillRank(character, skillKey) {
+  return character.data.skillRanks?.[skillKey] || 'none';
+}
+
+function getSkillModifierValue(character, skillKey) {
+  const skill = getSkillDefinition(skillKey);
+  if (!skill) {
+    return 0;
+  }
+
+  const abilityModifierValue = getAbilityModifierValue(character.data.abilities[skill.ability]);
+  const proficiencyAdjustment = getProficiencyAdjustment(
+    getSkillRank(character, skillKey),
+    getProficiencyBonus(character)
+  );
+  const extraBonus = Number(character.data.skillBonuses?.[skillKey] || 0);
+
+  return abilityModifierValue + proficiencyAdjustment + extraBonus;
+}
+
+function getAttackAbilityKey(attack = {}) {
+  return ABILITY_KEYS.includes(attack.ability) ? attack.ability : 'STR';
+}
+
+function getAttackDamageAbilityKey(attack = {}) {
+  if (attack.damageAbility === 'same') {
+    return getAttackAbilityKey(attack);
+  }
+
+  return ABILITY_KEYS.includes(attack.damageAbility) ? attack.damageAbility : null;
+}
+
+function getAttackRollModifier(character, attack = {}) {
+  const abilityModifierValue = getAbilityModifierValue(character.data.abilities[getAttackAbilityKey(attack)]);
+  const proficiencyAdjustment = getProficiencyAdjustment(
+    attack.proficiency || 'proficient',
+    getProficiencyBonus(character)
+  );
+
+  return abilityModifierValue + proficiencyAdjustment + Number(attack.attackBonus || 0);
+}
+
+function getAttackDamageModifier(character, attack = {}) {
+  const damageAbilityKey = getAttackDamageAbilityKey(attack);
+  return Number(attack.damageBonus || 0) + (damageAbilityKey ? getAbilityModifierValue(character.data.abilities[damageAbilityKey]) : 0);
+}
+
+function getSpellcastingAbilityKey(character) {
+  if (ABILITY_KEYS.includes(character.data.spellcasting?.ability)) {
+    return character.data.spellcasting.ability;
+  }
+
+  return SPELLCASTING_ABILITY_BY_CLASS[character.data.classSlug] || getStrongestAbilityKey(character);
+}
+
+function getSpellAttackModifier(character) {
+  return (
+    getAbilityModifierValue(character.data.abilities[getSpellcastingAbilityKey(character)]) +
+    getProficiencyBonus(character) +
+    Number(character.data.spellcasting?.attackBonus || 0)
+  );
+}
+
+function getSpellSaveDc(character) {
+  return (
+    8 +
+    getAbilityModifierValue(character.data.abilities[getSpellcastingAbilityKey(character)]) +
+    getProficiencyBonus(character) +
+    Number(character.data.spellcasting?.saveDcBonus || 0)
+  );
+}
+
+function getSpellDamageAbilityKey(character, spell = {}) {
+  if (spell.damageAbility === 'spell') {
+    return getSpellcastingAbilityKey(character);
+  }
+
+  return ABILITY_KEYS.includes(spell.damageAbility) ? spell.damageAbility : null;
+}
+
+function getSpellDamageModifier(character, spell = {}) {
+  const damageAbilityKey = getSpellDamageAbilityKey(character, spell);
+  return Number(spell.damageBonus || 0) + (damageAbilityKey ? getAbilityModifierValue(character.data.abilities[damageAbilityKey]) : 0);
+}
+
 function getDefaultDiceModel(models = state.dice.models) {
   if (!Array.isArray(models) || models.length === 0) {
     return null;
@@ -225,6 +465,77 @@ function ensureCompendiumPosition() {
   });
 }
 
+function createDefaultAttack() {
+  return {
+    name: '',
+    ability: 'STR',
+    proficiency: 'proficient',
+    attackBonus: 0,
+    damageDice: '1d8',
+    damageAbility: 'same',
+    damageBonus: 0,
+    sourceType: '',
+    sourceSlug: '',
+    sourceCode: '',
+    sourceName: '',
+    requiresEquipped: false,
+    notes: '',
+  };
+}
+
+function createDefaultInventoryEntry() {
+  return {
+    name: '',
+    quantity: 1,
+    equipped: false,
+    source: '',
+    description: '',
+    notes: '',
+    compendiumType: 'items',
+    slug: '',
+    code: '',
+    tags: null,
+    profile: null,
+    properties: null,
+  };
+}
+
+function createDefaultSpellEntry() {
+  return {
+    name: '',
+    level: 0,
+    source: '',
+    description: '',
+    higherLevelText: '',
+    rollMode: 'utility',
+    damageDice: '',
+    damageAbility: 'spell',
+    damageBonus: 0,
+    compendiumType: 'spells',
+    slug: '',
+    code: '',
+    attackType: '',
+    tags: null,
+    damage: null,
+  };
+}
+
+function createDefaultFeatureEntry() {
+  return {
+    name: '',
+    source: '',
+    description: '',
+    shortDescription: '',
+    featureType: '',
+    levelRequired: null,
+    compendiumType: 'features',
+    slug: '',
+    code: '',
+    effects: null,
+    tags: null,
+  };
+}
+
 function createDefaultCharacter() {
   return {
     name: 'Unnamed Hero',
@@ -250,9 +561,17 @@ function createDefaultCharacter() {
     ac: 10,
     speed: 30,
     initiative: 0,
+    skillRanks: {},
+    skillBonuses: {},
     conditions: [],
+    attacks: [],
     inventory: [],
     spells: [],
+    spellcasting: {
+      ability: '',
+      attackBonus: 0,
+      saveDcBonus: 0,
+    },
     features: [],
     notes: '',
   };
@@ -280,6 +599,328 @@ function getCompendiumEntryBySlug(type, slug) {
 
 function getClassHitDie(classSlug) {
   return Number(getCompendiumEntryBySlug('classes', classSlug)?.hitDie || 8);
+}
+
+function getCompendiumDescription(result) {
+  return String(result?.fullDescription || result?.description || buildItemProfileSummary(result) || '').trim();
+}
+
+function getCompendiumShortDescription(result) {
+  return String(result?.shortDescription || result?.description || '').trim();
+}
+
+function getCompendiumHigherLevelText(result) {
+  return String(result?.higherLevelText || '').trim();
+}
+
+function getCompendiumTagYear(result) {
+  return String(result?.tags?.year || '').trim();
+}
+
+function normalizeCompendiumDamageExpression(expression) {
+  const analysis = analyzeRollFormula(expression);
+  if (!analysis) {
+    return { dice: '', modifier: 0 };
+  }
+
+  const diceMatch = analysis.formula.match(/^(\d+d\d+)/i);
+  return {
+    dice: diceMatch ? diceMatch[1] : '',
+    modifier: analysis.modifier || 0,
+  };
+}
+
+function pickFirstDamageExpression(result) {
+  const damage = result?.damage;
+  if (damage && typeof damage === 'object') {
+    const slotLevels = damage.damage_at_slot_level || damage.damageAtSlotLevel;
+    if (slotLevels && typeof slotLevels === 'object') {
+      const key = Object.keys(slotLevels)
+        .sort((left, right) => Number(left) - Number(right))
+        .find((entry) => slotLevels[entry]);
+      if (key) {
+        return String(slotLevels[key]);
+      }
+    }
+
+    const characterLevels = damage.damage_at_character_level || damage.damageAtCharacterLevel;
+    if (characterLevels && typeof characterLevels === 'object') {
+      const key = Object.keys(characterLevels)
+        .sort((left, right) => Number(left) - Number(right))
+        .find((entry) => characterLevels[entry]);
+      if (key) {
+        return String(characterLevels[key]);
+      }
+    }
+
+    if (damage.damage_dice || damage.damageDice) {
+      return String(damage.damage_dice || damage.damageDice);
+    }
+  }
+
+  const description = getCompendiumDescription(result);
+  const match = description.match(/\b\d+d\d+(?:\s*\+\s*\d+)?\b/i);
+  return match ? match[0] : '';
+}
+
+function extractAttackBonusFromText(text) {
+  const toHitMatch = String(text || '').match(/\+(\d+)\s+to hit/i);
+  if (toHitMatch) {
+    return Number(toHitMatch[1]) || 0;
+  }
+
+  const bonusMatch = String(text || '').match(/\+(\d+)\s+bonus to attack rolls?/i);
+  return bonusMatch ? Number(bonusMatch[1]) || 0 : 0;
+}
+
+function extractDamageBonusFromText(text) {
+  const bonusToBothMatch = String(text || '').match(/\+(\d+)\s+bonus to attack and damage rolls?/i);
+  if (bonusToBothMatch) {
+    return Number(bonusToBothMatch[1]) || 0;
+  }
+
+  const bonusMatch = String(text || '').match(/\+(\d+)\s+bonus to damage rolls?/i);
+  return bonusMatch ? Number(bonusMatch[1]) || 0 : 0;
+}
+
+function buildInventoryEntryFromResult(result) {
+  return {
+    ...createDefaultInventoryEntry(),
+    name: result.name,
+    source: result.sourceCode || '',
+    description: getCompendiumDescription(result),
+    compendiumType: result.type || 'items',
+    slug: result.slug || '',
+    code: result.code || '',
+    tags: result.tags || null,
+    profile: result.profile || null,
+    properties: result.properties || null,
+  };
+}
+
+function buildSpellEntryFromResult(result) {
+  const description = getCompendiumDescription(result);
+  const damageExpression = pickFirstDamageExpression(result);
+  const normalizedDamage = normalizeCompendiumDamageExpression(damageExpression);
+  const rollMode = result.attackType
+    ? 'attack'
+    : /saving throw/i.test(description)
+      ? 'save'
+      : 'utility';
+  const damageAbility = /spellcasting ability modifier/i.test(description) ? 'spell' : 'none';
+
+  return {
+    ...createDefaultSpellEntry(),
+    name: result.name,
+    level: result.level ?? 0,
+    source: result.sourceCode || '',
+    description,
+    higherLevelText: getCompendiumHigherLevelText(result),
+    rollMode,
+    damageDice: normalizedDamage.dice,
+    damageAbility,
+    damageBonus: normalizedDamage.modifier,
+    compendiumType: result.type || 'spells',
+    slug: result.slug || '',
+    code: result.code || '',
+    attackType: result.attackType || '',
+    tags: result.tags || null,
+    damage: result.damage || null,
+  };
+}
+
+function buildFeatureEntryFromResult(result) {
+  return {
+    ...createDefaultFeatureEntry(),
+    name: result.name,
+    source: result.sourceCode || '',
+    description: getCompendiumDescription(result),
+    shortDescription: getCompendiumShortDescription(result),
+    featureType: result.featureType || '',
+    levelRequired: result.levelRequired ?? null,
+    compendiumType: result.type || 'features',
+    slug: result.slug || '',
+    code: result.code || '',
+    effects: result.effects || null,
+    tags: result.tags || null,
+  };
+}
+
+function getItemProfileRaw(result) {
+  return result?.profile?.raw || result?.profile || null;
+}
+
+function getItemPropertyNames(result) {
+  const properties = result?.properties?.properties;
+  if (!Array.isArray(properties)) {
+    return [];
+  }
+
+  return properties.map((property) => property?.name || property?.index).filter(Boolean);
+}
+
+function buildItemProfileSummary(result) {
+  const profile = getItemProfileRaw(result);
+  if (!profile) {
+    return '';
+  }
+
+  const parts = [];
+  if (profile?.weapon_range) {
+    parts.push(`${profile.weapon_range} weapon`);
+  }
+  if (profile?.damage?.damage_dice && profile?.damage?.damage_type?.name) {
+    parts.push(`${profile.damage.damage_dice} ${String(profile.damage.damage_type.name).toLowerCase()} damage`);
+  }
+  if (profile?.range?.normal) {
+    parts.push(`Range ${profile.range.normal}${profile.range.long ? `/${profile.range.long}` : ''} ft.`);
+  }
+  if (profile?.throw_range?.normal) {
+    parts.push(`Thrown ${profile.throw_range.normal}${profile.throw_range.long ? `/${profile.throw_range.long}` : ''} ft.`);
+  }
+  const propertyNames = getItemPropertyNames(result);
+  if (propertyNames.length > 0) {
+    parts.push(`Properties: ${propertyNames.join(', ')}`);
+  }
+
+  return parts.join('. ');
+}
+
+function buildAttackFromItemProfile(result) {
+  const profile = getItemProfileRaw(result);
+  const damageDice = profile?.damage?.damage_dice || profile?.damage?.damageDice || '';
+  if (!damageDice) {
+    return null;
+  }
+
+  const propertyNames = getItemPropertyNames(result);
+  const isRanged = String(profile?.weapon_range || '').toLowerCase() === 'ranged';
+  const isFinesse = propertyNames.some((property) => String(property).toLowerCase() === 'finesse');
+  const rangeBits = [];
+  if (profile?.range?.normal) {
+    rangeBits.push(`Range ${profile.range.normal}${profile.range.long ? `/${profile.range.long}` : ''} ft.`);
+  }
+  if (profile?.throw_range?.normal) {
+    rangeBits.push(`Thrown ${profile.throw_range.normal}${profile.throw_range.long ? `/${profile.throw_range.long}` : ''} ft.`);
+  }
+
+  const text = `${result.name} ${getCompendiumDescription(result)}`;
+  const attackBonus = extractAttackBonusFromText(text);
+  const damageBonus = extractDamageBonusFromText(text);
+  const sourceMeta = [result.sourceCode || '', getCompendiumTagYear(result) || ''].filter(Boolean).join(' ');
+
+  return {
+    ...createDefaultAttack(),
+    name: result.name,
+    ability: isRanged || isFinesse ? 'DEX' : 'STR',
+    proficiency: 'proficient',
+    attackBonus,
+    damageDice,
+    damageAbility: 'same',
+    damageBonus,
+    sourceType: 'item',
+    sourceSlug: result.slug || '',
+    sourceCode: result.code || '',
+    sourceName: result.name,
+    requiresEquipped: true,
+    notes: [sourceMeta, rangeBits.join(' · '), getCompendiumDescription(result)].filter(Boolean).join('\n\n'),
+  };
+}
+
+function buildAttackFromDescription(result, options = {}) {
+  const description = getCompendiumDescription(result);
+  const damageExpression = pickFirstDamageExpression(result);
+  const normalizedDamage = normalizeCompendiumDamageExpression(damageExpression);
+  const attackBonus = extractAttackBonusFromText(description);
+  const damageBonus = normalizedDamage.modifier + extractDamageBonusFromText(description);
+  const hasAttackLanguage = /(?:melee|ranged)\s+(?:weapon|spell\s+)?attack|attack rolls?|unarmed strikes?|natural weapon|slam attack|bite attack|claw attack|breath weapon/i.test(description);
+
+  if ((!hasAttackLanguage && attackBonus === 0) || (!normalizedDamage.dice && attackBonus === 0)) {
+    return null;
+  }
+
+  let ability = options.defaultAbility || 'STR';
+  if (/using dexterity/i.test(description) || /ranged attack/i.test(description)) {
+    ability = 'DEX';
+  } else if (/using strength/i.test(description) || /melee weapon/i.test(description) || /unarmed strike/i.test(description)) {
+    ability = 'STR';
+  }
+
+  return {
+    ...createDefaultAttack(),
+    name: result.name,
+    ability,
+    proficiency: /proficient/i.test(description) ? 'proficient' : options.proficiency || 'proficient',
+    attackBonus,
+    damageDice: normalizedDamage.dice || '1d4',
+    damageAbility: 'same',
+    damageBonus,
+    sourceType: result.type || '',
+    sourceSlug: result.slug || '',
+    sourceCode: result.code || '',
+    sourceName: result.name,
+    requiresEquipped: options.requiresEquipped === true,
+    notes: [result.sourceCode || '', description].filter(Boolean).join('\n\n'),
+  };
+}
+
+function buildCompendiumImportPlan(result) {
+  if (!result) {
+    return [];
+  }
+
+  if (result.type === 'items') {
+    const plan = [{ list: 'inventory', entry: buildInventoryEntryFromResult(result) }];
+    const attack = buildAttackFromItemProfile(result) || buildAttackFromDescription(result, { requiresEquipped: true });
+    if (attack) {
+      plan.push({ list: 'attacks', entry: attack });
+    }
+    return plan;
+  }
+
+  if (result.type === 'spells') {
+    return [{ list: 'spells', entry: buildSpellEntryFromResult(result) }];
+  }
+
+  const plan = [{ list: 'features', entry: buildFeatureEntryFromResult(result) }];
+  const featureAttack = buildAttackFromDescription(result, { requiresEquipped: false });
+  if (featureAttack) {
+    plan.push({ list: 'attacks', entry: featureAttack });
+  }
+  return plan;
+}
+
+function getCompendiumDestinationLabels(result) {
+  const labels = {
+    inventory: 'Inventory',
+    attacks: 'Attacks',
+    spells: 'Spells',
+    features: 'Features',
+  };
+
+  return [...new Set(buildCompendiumImportPlan(result).map((entry) => labels[entry.list] || titleize(entry.list, entry.list)))];
+}
+
+function findInventorySourceForAttack(character, attack) {
+  if (!character || !attack?.requiresEquipped) {
+    return null;
+  }
+
+  return (
+    character.data.inventory.find((entry) =>
+      (attack.sourceSlug && entry.slug === attack.sourceSlug) ||
+      (attack.sourceCode && entry.code === attack.sourceCode) ||
+      (attack.sourceName && entry.name === attack.sourceName)
+    ) || null
+  );
+}
+
+function isAttackAvailable(character, attack) {
+  if (!attack?.requiresEquipped) {
+    return true;
+  }
+
+  return Boolean(findInventorySourceForAttack(character, attack)?.equipped);
 }
 
 function buildStartingCombatProfile(draft) {
@@ -340,11 +981,45 @@ function createWizardState(mode, character = null) {
 }
 
 function normalizeCharacter(character) {
+  const defaults = createDefaultCharacter();
   const data = {
-    ...createDefaultCharacter(),
+    ...defaults,
     ...(character?.data || {}),
   };
 
+  data.abilities = {
+    ...defaults.abilities,
+    ...(data.abilities || {}),
+  };
+  data.hp = {
+    ...defaults.hp,
+    ...(data.hp || {}),
+  };
+  data.skillRanks = {
+    ...defaults.skillRanks,
+    ...(data.skillRanks || {}),
+  };
+  data.skillBonuses = {
+    ...defaults.skillBonuses,
+    ...(data.skillBonuses || {}),
+  };
+  data.spellcasting = {
+    ...defaults.spellcasting,
+    ...(data.spellcasting || {}),
+  };
+  data.conditions = Array.isArray(data.conditions) ? data.conditions : [];
+  data.attacks = Array.isArray(data.attacks)
+    ? data.attacks.map((entry) => ({ ...createDefaultAttack(), ...(entry || {}) }))
+    : [];
+  data.inventory = Array.isArray(data.inventory)
+    ? data.inventory.map((entry) => ({ ...createDefaultInventoryEntry(), ...(entry || {}) }))
+    : [];
+  data.spells = Array.isArray(data.spells)
+    ? data.spells.map((entry) => ({ ...createDefaultSpellEntry(), ...(entry || {}) }))
+    : [];
+  data.features = Array.isArray(data.features)
+    ? data.features.map((entry) => ({ ...createDefaultFeatureEntry(), ...(entry || {}) }))
+    : [];
   data.name = data.name || character?.name || 'Unnamed Hero';
   data.edition = data.edition || character?.edition || state.editionFilter;
   data.level = Number(data.level || character?.level || 1);
@@ -392,11 +1067,7 @@ function getVisibleCharacters() {
 }
 
 function getCharacterOverview(character) {
-  const strongestAbility = ABILITY_KEYS.reduce((bestKey, currentKey) =>
-    Number(character.data.abilities[currentKey] || 0) > Number(character.data.abilities[bestKey] || 0)
-      ? currentKey
-      : bestKey
-  );
+  const strongestAbility = getStrongestAbilityKey(character);
   const lineageBits = [
     titleize(character.data.ancestrySlug, ''),
     titleize(character.data.classSlug, 'Unclassed'),
@@ -435,6 +1106,7 @@ function getCharacterOverview(character) {
       {
         label: 'Loadout',
         value:
+          character.data.attacks.length +
           character.data.inventory.length +
           character.data.spells.length +
           character.data.features.length,
@@ -463,6 +1135,36 @@ function openWizard(mode, character = null) {
 function closeWizard() {
   state.wizard = null;
   render();
+}
+
+function openSheetEntryModal(listName, index) {
+  state.sheetEntryModal = { listName, index: Number(index) };
+  render();
+}
+
+function closeSheetEntryModal() {
+  state.sheetEntryModal = null;
+  render();
+}
+
+function getSheetEntryModalData() {
+  const character = activeCharacter();
+  const modalState = state.sheetEntryModal;
+  if (!character || !modalState) {
+    return null;
+  }
+
+  const entry = character.data?.[modalState.listName]?.[modalState.index];
+  if (!entry) {
+    return null;
+  }
+
+  return {
+    character,
+    listName: modalState.listName,
+    index: modalState.index,
+    entry,
+  };
 }
 
 function setSheetTab(tab) {
@@ -665,25 +1367,25 @@ function setDiceSetting(key, value) {
   }
 }
 
-function buildDiceRoll(values, sides, modifier) {
+function buildDiceRoll(values, formula, modifier = 0, label = '') {
   const subtotal = values.reduce((total, result) => total + result, 0);
   return {
+    label,
     values,
-    sides,
     modifier,
     subtotal,
     total: subtotal + modifier,
-    formula: describeRollFormula(values.length, sides, modifier),
+    formula,
     timestamp: new Date().toISOString(),
   };
 }
 
-function buildDiceRollFromResults(results, sides, modifier) {
+function buildDiceRollFromResults(results, formula, modifier = 0, label = '') {
   const values = (Array.isArray(results) ? results : [])
     .map((entry) => Number(entry?.value))
     .filter((value) => Number.isFinite(value));
 
-  return buildDiceRoll(values, sides, modifier);
+  return buildDiceRoll(values, formula, modifier, label);
 }
 
 function syncDiceModels(models) {
@@ -801,6 +1503,15 @@ async function rollDice() {
   state.dice.count = count;
   state.dice.sides = sides;
   state.dice.modifier = modifier;
+  await rollDiceFormula(describeRollFormula(count, sides, modifier));
+}
+
+async function rollDiceFormula(formula, label = '') {
+  const analysis = analyzeRollFormula(formula);
+  if (!analysis?.hasDice) {
+    throw new Error('Roll formulas must use standard dice notation such as 1d20+5 or 2d6+3.');
+  }
+
   state.dice.open = true;
   state.dice.rollId += 1;
   state.dice.rolling = true;
@@ -811,11 +1522,7 @@ async function rollDice() {
 
   try {
     const box = await ensureDiceBox();
-    const roll = buildDiceRollFromResults(
-      await box.roll(describeRollFormula(count, sides, modifier)),
-      sides,
-      modifier
-    );
+    const roll = buildDiceRollFromResults(await box.roll(analysis.formula), analysis.formula, analysis.modifier, label);
 
     if (state.dice.rollId !== activeRollId) {
       return;
@@ -967,6 +1674,7 @@ async function logout() {
   state.rosterQuery = '';
   state.createFlowOpen = false;
   state.wizard = null;
+  state.sheetEntryModal = null;
   state.dice = {
     open: false,
     count: 1,
@@ -1117,48 +1825,18 @@ function addCompendiumEntry(index, targetList = null) {
     return;
   }
 
-  const resolvedList =
-    targetList ||
-    (state.compendiumType === 'spells'
-      ? 'spells'
-      : state.compendiumType === 'items'
-        ? 'inventory'
-        : 'features');
-  const preferredList =
-    state.compendiumType === 'spells'
-      ? 'spells'
-      : state.compendiumType === 'items'
-        ? 'inventory'
-        : 'features';
-
-  if (targetList && resolvedList !== preferredList) {
-    setMessage('info', `${titleize(state.compendiumType, 'Compendium')} entries should be dropped onto ${preferredList}.`);
-    return;
-  }
-
-  if (resolvedList === 'spells') {
-    character.data.spells.push({
-      name: result.name,
-      level: result.level ?? 0,
-      source: result.sourceCode || '',
-      description: result.description || '',
-    });
-  } else if (resolvedList === 'inventory') {
-    character.data.inventory.push({
-      name: result.name,
-      quantity: 1,
-      notes: result.description || '',
-    });
-  } else {
-    character.data.features.push({
-      name: result.name,
-      source: result.sourceCode || '',
-      description: result.description || '',
-    });
+  const plan = buildCompendiumImportPlan(result);
+  for (const operation of plan) {
+    character.data[operation.list].push(operation.entry);
   }
 
   if (!state.compendiumPinned) {
     state.compendiumHidden = true;
+  }
+
+  const destinations = getCompendiumDestinationLabels(result).join(', ');
+  if (targetList && targetList !== 'sheet') {
+    setMessage('success', `${result.name} routed to ${destinations}.`);
   }
 
   render();
@@ -1311,13 +1989,38 @@ function renderSummaryCards(character) {
     .join('');
 }
 
+function renderRollActionButton({ label, formula, text, classes = '', tone = 'subtle', disabled = false }) {
+  const analysis = analyzeRollFormula(formula);
+  const className = ['button', tone, 'roll-action', classes].filter(Boolean).join(' ');
+  const isDisabled = disabled || !analysis?.hasDice;
+
+  return `
+    <button
+      class="${className}"
+      data-action="roll-sheet-formula"
+      data-label="${escapeHtml(label)}"
+      data-formula="${escapeHtml(analysis?.formula || '')}"
+      ${isDisabled ? 'disabled' : ''}
+    >
+      ${escapeHtml(text)}
+    </button>
+  `;
+}
+
+function renderRouteChips(labels) {
+  return labels
+    .map((label) => `<span class="route-chip">${escapeHtml(label)}</span>`)
+    .join('');
+}
+
 function renderInventorySection(character) {
+  const equippedCount = character.data.inventory.filter((entry) => entry.equipped).length;
   return `
     <section class="editor-card editor-card--section droppable-zone" data-dropzone="inventory">
       <div class="panel-header">
         <div>
           <div class="section-title">Inventory</div>
-          <div class="muted">${escapeHtml(character.data.inventory.length)} tracked item${character.data.inventory.length === 1 ? '' : 's'}</div>
+          <div class="muted">${escapeHtml(character.data.inventory.length)} tracked item${character.data.inventory.length === 1 ? '' : 's'} · ${escapeHtml(equippedCount)} equipped</div>
         </div>
         <button class="button subtle" data-action="add-entry" data-list="inventory">Add Item</button>
       </div>
@@ -1328,16 +2031,20 @@ function renderInventorySection(character) {
             : character.data.inventory
                 .map(
                   (entry, index) => `
-                    <div class="entry">
-                      <div class="entry-top">
+                    <div class="entry sheet-entry-row">
+                      <div class="sheet-entry-row__copy">
                         <strong>${escapeHtml(entry.name || 'Item')}</strong>
-                        <button class="button danger" data-action="remove-entry" data-list="inventory" data-index="${index}">Remove</button>
+                        <div class="muted">${renderMetaBits([
+                          entry.equipped ? 'Equipped' : 'Stored',
+                          entry.quantity > 1 ? `Qty ${entry.quantity}` : '',
+                          entry.source || '',
+                        ])}</div>
                       </div>
-                      <div class="editor-grid editor-grid--tight">
-                        <input class="input" data-list="inventory" data-index="${index}" data-field="name" value="${escapeHtml(entry.name || '')}" placeholder="Name" />
-                        <input class="input" type="number" min="1" data-list="inventory" data-index="${index}" data-field="quantity" value="${escapeHtml(entry.quantity || 1)}" placeholder="Qty" />
+                      <div class="button-row button-row--tight">
+                        <button class="button subtle button--small" data-action="toggle-equip" data-index="${index}">${entry.equipped ? 'Unequip' : 'Equip'}</button>
+                        <button class="button subtle button--small" data-action="open-sheet-entry" data-list="inventory" data-index="${index}">View</button>
+                        <button class="button danger button--small" data-action="remove-entry" data-list="inventory" data-index="${index}">Remove</button>
                       </div>
-                      <textarea class="textarea textarea--compact" data-list="inventory" data-index="${index}" data-field="notes" placeholder="Notes">${escapeHtml(entry.notes || '')}</textarea>
                     </div>
                   `
                 )
@@ -1348,40 +2055,235 @@ function renderInventorySection(character) {
   `;
 }
 
-function renderSpellSection(character) {
+function renderSkillsPanel(character) {
   return `
-    <section class="editor-card editor-card--section droppable-zone" data-dropzone="spells">
+    <section class="editor-card sheet-card sheet-card--wide">
       <div class="panel-header">
         <div>
-          <div class="section-title">Spellbook</div>
-          <div class="muted">${escapeHtml(character.data.spells.length)} spell${character.data.spells.length === 1 ? '' : 's'} prepared</div>
+          <div class="section-title">Skills</div>
+          <div class="muted">Every roll uses the linked ability, proficiency bonus, and any extra modifier on the sheet.</div>
         </div>
-        <button class="button subtle" data-action="add-entry" data-list="spells">Add Spell</button>
+        <span class="pill-badge">Prof ${escapeHtml(formatSigned(getProficiencyBonus(character)))}</span>
+      </div>
+      <div class="skill-list">
+        ${SKILL_DEFINITIONS.map((skill) => {
+          const modifier = getSkillModifierValue(character, skill.key);
+          const bonus = Number(character.data.skillBonuses?.[skill.key] || 0);
+
+          return `
+            <div class="skill-row">
+              <div class="skill-row__copy">
+                <strong>${escapeHtml(skill.label)}</strong>
+                <div class="muted">${escapeHtml(ABILITY_LABELS[skill.ability])} (${escapeHtml(skill.ability)})</div>
+              </div>
+              <div class="skill-row__modifier">${escapeHtml(formatSigned(modifier))}</div>
+              <label class="field field--inline">
+                <span class="label">Training</span>
+                <select class="select" data-bind="skillRanks.${skill.key}">
+                  ${SKILL_PROFICIENCY_OPTIONS.map(([value, label]) => `
+                    <option value="${value}" ${getSkillRank(character, skill.key) === value ? 'selected' : ''}>${escapeHtml(label)}</option>
+                  `).join('')}
+                </select>
+              </label>
+              <label class="field field--inline">
+                <span class="label">Bonus</span>
+                <input class="input" type="number" min="-20" max="20" data-bind="skillBonuses.${skill.key}" value="${escapeHtml(String(bonus))}" />
+              </label>
+              ${renderRollActionButton({
+                label: `${skill.label} Check`,
+                formula: describeRollFormula(1, 20, modifier),
+                text: `Roll ${formatSigned(modifier)}`,
+                classes: 'button--small roll-action--sheet',
+              })}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function renderAttackSection(character) {
+  return `
+    <section class="editor-card editor-card--section sheet-card sheet-card--wide droppable-zone" data-dropzone="attacks">
+      <div class="panel-header">
+        <div>
+          <div class="section-title">Attacks</div>
+          <div class="muted">Attack and damage rolls update from the configured ability, proficiency, item bonus, and equipped state.</div>
+        </div>
+        <button class="button subtle" data-action="add-entry" data-list="attacks">Add Attack</button>
       </div>
       <div class="item-list">
         ${
-          character.data.spells.length === 0
-            ? '<div class="empty-card">No spells recorded yet. Search the compendium to seed the list.</div>'
-            : character.data.spells
-                .map(
-                  (entry, index) => `
-                    <div class="entry">
-                      <div class="entry-top">
-                        <strong>${escapeHtml(entry.name || 'Spell')}</strong>
-                        <button class="button danger" data-action="remove-entry" data-list="spells" data-index="${index}">Remove</button>
+          character.data.attacks.length === 0
+            ? '<div class="empty-card">No attacks configured yet. Add a weapon or action and the sheet will calculate the roll buttons for you.</div>'
+            : character.data.attacks
+                .map((entry, index) => {
+                  const attackModifier = getAttackRollModifier(character, entry);
+                  const damageFormula = buildFormulaWithModifier(entry.damageDice, getAttackDamageModifier(character, entry));
+                  const available = isAttackAvailable(character, entry);
+                  const sourceItem = findInventorySourceForAttack(character, entry);
+                  const statusBits = [
+                    `${ABILITY_LABELS[getAttackAbilityKey(entry)]} ${formatSigned(attackModifier)}`,
+                    damageFormula ? `Damage ${damageFormula}` : '',
+                    entry.requiresEquipped ? sourceItem?.equipped ? 'Equipped' : 'Needs equip' : '',
+                  ].filter(Boolean);
+
+                  return `
+                    <div class="entry sheet-entry-row">
+                      <div class="sheet-entry-row__copy">
+                        <strong>${escapeHtml(entry.name || 'Attack')}</strong>
+                        <div class="muted">${renderMetaBits(statusBits)}</div>
                       </div>
-                      <div class="editor-grid editor-grid--tight">
-                        <input class="input" data-list="spells" data-index="${index}" data-field="name" value="${escapeHtml(entry.name || '')}" placeholder="Name" />
-                        <input class="input" type="number" min="0" max="9" data-list="spells" data-index="${index}" data-field="level" value="${escapeHtml(entry.level ?? 0)}" placeholder="Level" />
-                      </div>
-                      <textarea class="textarea textarea--compact" data-list="spells" data-index="${index}" data-field="description" placeholder="Description">${escapeHtml(entry.description || '')}</textarea>
+                      <div class="button-row button-row--tight">
+                          ${renderRollActionButton({
+                            label: `${entry.name || 'Attack'} Attack`,
+                            formula: describeRollFormula(1, 20, attackModifier),
+                            text: `Attack ${formatSigned(attackModifier)}`,
+                            classes: 'button--small',
+                            disabled: !available,
+                          })}
+                          ${
+                            damageFormula
+                              ? renderRollActionButton({
+                                  label: `${entry.name || 'Attack'} Damage`,
+                                  formula: damageFormula,
+                                  text: `Damage ${damageFormula}`,
+                                  classes: 'button--small',
+                                  disabled: !available,
+                                })
+                              : ''
+                          }
+                          <button class="button subtle button--small" data-action="open-sheet-entry" data-list="attacks" data-index="${index}">View</button>
+                          <button class="button danger button--small" data-action="remove-entry" data-list="attacks" data-index="${index}">Remove</button>
+                        </div>
                     </div>
-                  `
-                )
+                  `;
+                })
                 .join('')
         }
       </div>
     </section>
+  `;
+}
+
+function renderSpellcastingPanel(character) {
+  const spellAttackModifier = getSpellAttackModifier(character);
+  const saveDc = getSpellSaveDc(character);
+  const spellcastingAbility = getSpellcastingAbilityKey(character);
+
+  return `
+    <section class="editor-card sheet-card sheet-card--wide">
+      <div class="panel-header">
+        <div>
+          <div class="section-title">Spellcasting</div>
+          <div class="muted">Set the casting ability and global bonuses once. Spell attack and save values update automatically.</div>
+        </div>
+        <div class="button-row button-row--tight">
+          ${renderRollActionButton({
+            label: 'Spell Attack',
+            formula: describeRollFormula(1, 20, spellAttackModifier),
+            text: `Attack ${formatSigned(spellAttackModifier)}`,
+            classes: 'button--small',
+          })}
+          <span class="roll-badge">Save DC ${escapeHtml(String(saveDc))}</span>
+        </div>
+      </div>
+      <div class="editor-grid spellcasting-grid">
+        <label class="field">
+          <span class="label">Casting Ability</span>
+          <select class="select" data-bind="spellcasting.ability">
+            <option value="">Auto (${escapeHtml(spellcastingAbility)})</option>
+            ${ABILITY_KEYS.map((ability) => `
+              <option value="${ability}" ${character.data.spellcasting?.ability === ability ? 'selected' : ''}>${escapeHtml(ABILITY_LABELS[ability])}</option>
+            `).join('')}
+          </select>
+        </label>
+        <label class="field">
+          <span class="label">Proficiency Bonus</span>
+          <input class="input" value="${escapeHtml(formatSigned(getProficiencyBonus(character)))}" disabled />
+        </label>
+        <label class="field">
+          <span class="label">Attack Adj.</span>
+          <input class="input" type="number" min="-20" max="20" data-bind="spellcasting.attackBonus" value="${escapeHtml(String(Number(character.data.spellcasting?.attackBonus || 0)))}" />
+        </label>
+        <label class="field">
+          <span class="label">Save DC Adj.</span>
+          <input class="input" type="number" min="-20" max="20" data-bind="spellcasting.saveDcBonus" value="${escapeHtml(String(Number(character.data.spellcasting?.saveDcBonus || 0)))}" />
+        </label>
+      </div>
+    </section>
+  `;
+}
+
+function renderSpellSection(character) {
+  const spellAttackModifier = getSpellAttackModifier(character);
+  const spellSaveDc = getSpellSaveDc(character);
+
+  return `
+    <div class="sheet-panel-grid">
+      ${renderSpellcastingPanel(character)}
+      <section class="editor-card editor-card--section droppable-zone sheet-card sheet-card--wide" data-dropzone="spells">
+        <div class="panel-header">
+          <div>
+            <div class="section-title">Spellbook</div>
+            <div class="muted">${escapeHtml(character.data.spells.length)} spell${character.data.spells.length === 1 ? '' : 's'} prepared</div>
+          </div>
+          <button class="button subtle" data-action="add-entry" data-list="spells">Add Spell</button>
+        </div>
+        <div class="item-list">
+          ${
+            character.data.spells.length === 0
+              ? '<div class="empty-card">No spells recorded yet. Search the compendium to seed the list.</div>'
+              : character.data.spells
+                  .map((entry, index) => {
+                    const damageFormula = buildFormulaWithModifier(entry.damageDice, getSpellDamageModifier(character, entry));
+                    const rollMode = entry.rollMode || 'utility';
+                    const primaryAction =
+                      rollMode === 'attack'
+                        ? renderRollActionButton({
+                            label: `${entry.name || 'Spell'} Attack`,
+                            formula: describeRollFormula(1, 20, spellAttackModifier),
+                            text: `Attack ${formatSigned(spellAttackModifier)}`,
+                            classes: 'button--small',
+                          })
+                        : rollMode === 'save'
+                          ? `<span class="roll-badge">Save DC ${escapeHtml(String(spellSaveDc))}</span>`
+                          : '';
+
+                    return `
+                      <div class="entry sheet-entry-row">
+                        <div class="sheet-entry-row__copy">
+                          <strong>${escapeHtml(entry.name || 'Spell')}</strong>
+                          <div class="muted">${renderMetaBits([
+                            `Level ${entry.level ?? 0}`,
+                            entry.source || '',
+                            damageFormula ? `Damage ${damageFormula}` : '',
+                          ])}</div>
+                        </div>
+                        <div class="button-row button-row--tight">
+                            ${primaryAction}
+                            ${
+                              damageFormula
+                                ? renderRollActionButton({
+                                    label: `${entry.name || 'Spell'} Damage`,
+                                    formula: damageFormula,
+                                    text: `Damage ${damageFormula}`,
+                                    classes: 'button--small',
+                                  })
+                                : ''
+                            }
+                            <button class="button subtle button--small" data-action="open-sheet-entry" data-list="spells" data-index="${index}">View</button>
+                            <button class="button danger button--small" data-action="remove-entry" data-list="spells" data-index="${index}">Remove</button>
+                          </div>
+                      </div>
+                    `;
+                  })
+                  .join('')
+          }
+        </div>
+      </section>
+    </div>
   `;
 }
 
@@ -1402,13 +2304,19 @@ function renderFeatureSection(character) {
             : character.data.features
                 .map(
                   (entry, index) => `
-                    <div class="entry">
-                      <div class="entry-top">
+                    <div class="entry sheet-entry-row">
+                      <div class="sheet-entry-row__copy">
                         <strong>${escapeHtml(entry.name || 'Feature')}</strong>
-                        <button class="button danger" data-action="remove-entry" data-list="features" data-index="${index}">Remove</button>
+                        <div class="muted">${renderMetaBits([
+                          entry.featureType ? titleize(entry.featureType.replace(/_/g, ' '), entry.featureType) : '',
+                          entry.levelRequired != null ? `Level ${entry.levelRequired}+` : '',
+                          entry.source || '',
+                        ])}</div>
                       </div>
-                      <input class="input input--compact-gap" data-list="features" data-index="${index}" data-field="source" value="${escapeHtml(entry.source || '')}" placeholder="Source" />
-                      <textarea class="textarea textarea--compact" data-list="features" data-index="${index}" data-field="description" placeholder="Description">${escapeHtml(entry.description || '')}</textarea>
+                      <div class="button-row button-row--tight">
+                        <button class="button subtle button--small" data-action="open-sheet-entry" data-list="features" data-index="${index}">View</button>
+                        <button class="button danger button--small" data-action="remove-entry" data-list="features" data-index="${index}">Remove</button>
+                      </div>
                     </div>
                   `
                 )
@@ -1416,6 +2324,197 @@ function renderFeatureSection(character) {
         }
       </div>
     </section>
+  `;
+}
+
+function renderSheetEntryModal() {
+  const modalData = getSheetEntryModalData();
+  if (!modalData) {
+    return '';
+  }
+
+  const { listName, index, entry } = modalData;
+  const modalSectionLabels = {
+    inventory: 'Item',
+    spells: 'Spell',
+    features: 'Feature',
+    attacks: 'Attack',
+  };
+  let title;
+  let body;
+
+  if (listName === 'inventory') {
+    title = entry.name || 'Item';
+    body = `
+      <div class="sheet-entry-modal__grid">
+        <label class="field">
+          <span class="label">Name</span>
+          <input class="input" data-list="inventory" data-index="${index}" data-field="name" value="${escapeHtml(entry.name || '')}" />
+        </label>
+        <label class="field">
+          <span class="label">Quantity</span>
+          <input class="input" type="number" min="1" data-list="inventory" data-index="${index}" data-field="quantity" value="${escapeHtml(String(entry.quantity || 1))}" />
+        </label>
+        <label class="field field--checkbox">
+          <input type="checkbox" data-list="inventory" data-index="${index}" data-field="equipped" ${entry.equipped ? 'checked' : ''} />
+          <span>Equipped</span>
+        </label>
+        <label class="field sheet-entry-modal__full">
+          <span class="label">Source</span>
+          <input class="input" data-list="inventory" data-index="${index}" data-field="source" value="${escapeHtml(entry.source || '')}" />
+        </label>
+        <label class="field sheet-entry-modal__full">
+          <span class="label">Description</span>
+          <textarea class="textarea textarea--compact" data-list="inventory" data-index="${index}" data-field="description">${escapeHtml(entry.description || '')}</textarea>
+        </label>
+        <label class="field sheet-entry-modal__full">
+          <span class="label">Notes</span>
+          <textarea class="textarea textarea--compact" data-list="inventory" data-index="${index}" data-field="notes">${escapeHtml(entry.notes || '')}</textarea>
+        </label>
+      </div>
+    `;
+  } else if (listName === 'spells') {
+    title = entry.name || 'Spell';
+    body = `
+      <div class="sheet-entry-modal__grid">
+        <label class="field">
+          <span class="label">Name</span>
+          <input class="input" data-list="spells" data-index="${index}" data-field="name" value="${escapeHtml(entry.name || '')}" />
+        </label>
+        <label class="field">
+          <span class="label">Level</span>
+          <input class="input" type="number" min="0" max="9" data-list="spells" data-index="${index}" data-field="level" value="${escapeHtml(String(entry.level ?? 0))}" />
+        </label>
+        <label class="field">
+          <span class="label">Roll Type</span>
+          <select class="select" data-list="spells" data-index="${index}" data-field="rollMode">
+            ${SPELL_ROLL_MODE_OPTIONS.map(([value, label]) => `
+              <option value="${value}" ${(entry.rollMode || 'utility') === value ? 'selected' : ''}>${escapeHtml(label)}</option>
+            `).join('')}
+          </select>
+        </label>
+        <label class="field">
+          <span class="label">Source</span>
+          <input class="input" data-list="spells" data-index="${index}" data-field="source" value="${escapeHtml(entry.source || '')}" />
+        </label>
+        <label class="field">
+          <span class="label">Damage Dice</span>
+          <input class="input" data-list="spells" data-index="${index}" data-field="damageDice" value="${escapeHtml(entry.damageDice || '')}" />
+        </label>
+        <label class="field">
+          <span class="label">Damage Ability</span>
+          <select class="select" data-list="spells" data-index="${index}" data-field="damageAbility">
+            ${SPELL_DAMAGE_ABILITY_OPTIONS.map(([value, label]) => `
+              <option value="${value}" ${(entry.damageAbility || 'spell') === value ? 'selected' : ''}>${escapeHtml(label)}</option>
+            `).join('')}
+          </select>
+        </label>
+        <label class="field">
+          <span class="label">Damage Adj.</span>
+          <input class="input" type="number" min="-20" max="20" data-list="spells" data-index="${index}" data-field="damageBonus" value="${escapeHtml(String(Number(entry.damageBonus || 0)))}" />
+        </label>
+        <label class="field sheet-entry-modal__full">
+          <span class="label">Description</span>
+          <textarea class="textarea textarea--compact" data-list="spells" data-index="${index}" data-field="description">${escapeHtml(entry.description || '')}</textarea>
+        </label>
+        <label class="field sheet-entry-modal__full">
+          <span class="label">Higher Levels</span>
+          <textarea class="textarea textarea--compact" data-list="spells" data-index="${index}" data-field="higherLevelText">${escapeHtml(entry.higherLevelText || '')}</textarea>
+        </label>
+      </div>
+    `;
+  } else if (listName === 'features') {
+    title = entry.name || 'Feature';
+    body = `
+      <div class="sheet-entry-modal__grid">
+        <label class="field">
+          <span class="label">Name</span>
+          <input class="input" data-list="features" data-index="${index}" data-field="name" value="${escapeHtml(entry.name || '')}" />
+        </label>
+        <label class="field">
+          <span class="label">Source</span>
+          <input class="input" data-list="features" data-index="${index}" data-field="source" value="${escapeHtml(entry.source || '')}" />
+        </label>
+        <label class="field sheet-entry-modal__full">
+          <span class="label">Description</span>
+          <textarea class="textarea textarea--compact" data-list="features" data-index="${index}" data-field="description">${escapeHtml(entry.description || '')}</textarea>
+        </label>
+      </div>
+    `;
+  } else {
+    title = entry.name || 'Attack';
+    body = `
+      <div class="sheet-entry-modal__grid">
+        <label class="field">
+          <span class="label">Name</span>
+          <input class="input" data-list="attacks" data-index="${index}" data-field="name" value="${escapeHtml(entry.name || '')}" />
+        </label>
+        <label class="field">
+          <span class="label">Ability</span>
+          <select class="select" data-list="attacks" data-index="${index}" data-field="ability">
+            ${ABILITY_KEYS.map((ability) => `
+              <option value="${ability}" ${getAttackAbilityKey(entry) === ability ? 'selected' : ''}>${escapeHtml(ability)}</option>
+            `).join('')}
+          </select>
+        </label>
+        <label class="field">
+          <span class="label">Proficiency</span>
+          <select class="select" data-list="attacks" data-index="${index}" data-field="proficiency">
+            ${ATTACK_PROFICIENCY_OPTIONS.map(([value, label]) => `
+              <option value="${value}" ${(entry.proficiency || 'proficient') === value ? 'selected' : ''}>${escapeHtml(label)}</option>
+            `).join('')}
+          </select>
+        </label>
+        <label class="field">
+          <span class="label">Attack Adj.</span>
+          <input class="input" type="number" min="-20" max="20" data-list="attacks" data-index="${index}" data-field="attackBonus" value="${escapeHtml(String(Number(entry.attackBonus || 0)))}" />
+        </label>
+        <label class="field">
+          <span class="label">Damage Dice</span>
+          <input class="input" data-list="attacks" data-index="${index}" data-field="damageDice" value="${escapeHtml(entry.damageDice || '')}" />
+        </label>
+        <label class="field">
+          <span class="label">Damage Ability</span>
+          <select class="select" data-list="attacks" data-index="${index}" data-field="damageAbility">
+            ${DAMAGE_ABILITY_OPTIONS.map(([value, label]) => `
+              <option value="${value}" ${(entry.damageAbility || 'same') === value ? 'selected' : ''}>${escapeHtml(label)}</option>
+            `).join('')}
+          </select>
+        </label>
+        <label class="field">
+          <span class="label">Damage Adj.</span>
+          <input class="input" type="number" min="-20" max="20" data-list="attacks" data-index="${index}" data-field="damageBonus" value="${escapeHtml(String(Number(entry.damageBonus || 0)))}" />
+        </label>
+        <label class="field field--checkbox">
+          <input type="checkbox" data-list="attacks" data-index="${index}" data-field="requiresEquipped" ${entry.requiresEquipped ? 'checked' : ''} />
+          <span>Requires equipped item</span>
+        </label>
+        <label class="field sheet-entry-modal__full">
+          <span class="label">Notes</span>
+          <textarea class="textarea textarea--compact" data-list="attacks" data-index="${index}" data-field="notes">${escapeHtml(entry.notes || '')}</textarea>
+        </label>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="modal-overlay">
+      <section class="modal-panel modal-panel--entry">
+        <div class="modal-panel__header">
+          <div>
+            <div class="section-title">${escapeHtml(modalSectionLabels[listName] || 'Entry')}</div>
+            <h3 class="modal-title">${escapeHtml(title)}</h3>
+          </div>
+          <button class="modal-close" data-action="close-sheet-entry">&times;</button>
+        </div>
+        <div class="modal-panel__body">
+          ${body}
+        </div>
+        <div class="modal-panel__footer">
+          <button class="button subtle" data-action="close-sheet-entry">Close</button>
+        </div>
+      </section>
+    </div>
   `;
 }
 
@@ -1429,7 +2528,8 @@ function renderDiceHistory() {
       (roll) => `
         <div class="dice-history__item">
           <div>
-            <strong>${escapeHtml(roll.formula)}</strong>
+            <strong>${escapeHtml(roll.label || roll.formula)}</strong>
+            ${roll.label ? `<div class="muted">${escapeHtml(roll.formula)}</div>` : ''}
             <div class="muted">${escapeHtml(roll.values.join(', '))}${roll.modifier === 0 ? '' : ` ${escapeHtml(formatSigned(roll.modifier))}`}</div>
           </div>
           <div class="dice-history__total">${escapeHtml(String(roll.total))}</div>
@@ -1445,6 +2545,7 @@ function getSelectedCompendiumResult() {
 
 function renderDiceSummary() {
   const activeRoll = state.dice.lastRoll || {
+    label: '',
     total: null,
     formula: describeRollFormula(state.dice.count, state.dice.sides, state.dice.modifier),
     values: [],
@@ -1454,6 +2555,7 @@ function renderDiceSummary() {
 
   return `
     <div class="muted">${escapeHtml(activeModel?.name || 'No dice model')}</div>
+    ${activeRoll.label ? `<div class="dice-stage__label">${escapeHtml(activeRoll.label)}</div>` : ''}
     <div class="dice-stage__formula">${escapeHtml(activeRoll.formula)}</div>
     <div class="dice-stage__total">${escapeHtml(activeRoll.total == null ? '--' : String(activeRoll.total))}</div>
     <div class="muted">
@@ -1618,18 +2720,29 @@ function renderAbilitiesPanel(character) {
       <div class="panel-header">
         <div>
           <div class="section-title">Ability Scores</div>
-          <div class="muted">Direct edits with visible modifiers.</div>
+          <div class="muted">Roll checks directly from the score cards and keep the modifier in sync with the sheet.</div>
         </div>
       </div>
       <div class="ability-grid">
-        ${ABILITY_KEYS.map((ability) => `
-          <div class="ability-card">
-            <div class="ability-card__label">${escapeHtml(ABILITY_LABELS[ability])}</div>
-            <strong>${escapeHtml(ability)}</strong>
-            <input class="input ability-input" type="number" min="1" max="30" data-bind="abilities.${ability}" value="${escapeHtml(character.data.abilities[ability])}" />
-            <div class="ability-mod">${escapeHtml(abilityModifier(character.data.abilities[ability]))}</div>
-          </div>
-        `).join('')}
+        ${ABILITY_KEYS.map((ability) => {
+          const modifier = getAbilityModifierValue(character.data.abilities[ability]);
+          return `
+            <div class="ability-card">
+              <div class="ability-card__top">
+                <div class="ability-card__label">${escapeHtml(ABILITY_LABELS[ability])}</div>
+                ${renderRollActionButton({
+                  label: `${ABILITY_LABELS[ability]} Check`,
+                  formula: describeRollFormula(1, 20, modifier),
+                  text: `Check ${formatSigned(modifier)}`,
+                  classes: 'button--small roll-action--inline',
+                })}
+              </div>
+              <strong>${escapeHtml(ability)}</strong>
+              <input class="input ability-input" type="number" min="1" max="30" data-bind="abilities.${ability}" value="${escapeHtml(character.data.abilities[ability])}" />
+              <div class="ability-mod">${escapeHtml(abilityModifier(character.data.abilities[ability]))}</div>
+            </div>
+          `;
+        }).join('')}
       </div>
     </section>
   `;
@@ -1653,6 +2766,7 @@ function renderOverviewTab(character) {
         </div>
       </section>
       ${renderAbilitiesPanel(character)}
+      ${renderSkillsPanel(character)}
       ${renderConditionsPanel(character)}
     </div>
   `;
@@ -1665,8 +2779,14 @@ function renderCombatTab(character) {
         <div class="panel-header">
           <div>
             <div class="section-title">Combat Snapshot</div>
-            <div class="muted">Primary combat values with direct edits.</div>
+            <div class="muted">Primary combat values with direct edits and live initiative rolling.</div>
           </div>
+          ${renderRollActionButton({
+            label: 'Initiative',
+            formula: describeRollFormula(1, 20, Number(character.data.initiative || 0)),
+            text: `Initiative ${formatSigned(character.data.initiative || 0)}`,
+            classes: 'button--small',
+          })}
         </div>
         <div class="resource-grid">
           <label class="field"><span class="label">Level</span><input class="input" type="number" min="1" max="20" data-bind="level" value="${escapeHtml(character.data.level)}" /></label>
@@ -1678,6 +2798,7 @@ function renderCombatTab(character) {
           <label class="field"><span class="label">Initiative</span><input class="input" type="number" min="-20" max="20" data-bind="initiative" value="${escapeHtml(character.data.initiative)}" /></label>
         </div>
       </section>
+      ${renderAttackSection(character)}
       ${renderConditionsPanel(character)}
     </div>
   `;
@@ -1765,6 +2886,12 @@ function renderEditor(character) {
             <div class="sheet-header__summary-card">
               <span class="label">Initiative</span>
               <strong>${escapeHtml(formatSigned(character.data.initiative))}</strong>
+              ${renderRollActionButton({
+                label: 'Initiative',
+                formula: describeRollFormula(1, 20, Number(character.data.initiative || 0)),
+                text: 'Roll',
+                classes: 'button--small roll-action--inline',
+              })}
             </div>
           </div>
         </div>
@@ -1833,7 +2960,7 @@ function renderEditor(character) {
         </section>
         ${renderSheetTabs()}
       </header>
-      <div class="sheet-content">
+      <div class="sheet-content" data-dropzone="sheet">
         ${sheetContent}
       </div>
     </section>
@@ -1846,17 +2973,18 @@ function renderCompendiumResult(result, index) {
     result.level != null ? `Level ${result.level}` : '',
     result.featureType || '',
   ];
+  const destinations = getCompendiumDestinationLabels(result);
 
   return `
-    <article class="result-card ${state.compendiumDetailIndex === index ? 'active' : ''}" data-action="select-compendium-result" data-index="${index}" draggable="true" data-compendium-index="${index}">
+    <article class="result-card result-card--compact ${state.compendiumDetailIndex === index ? 'active' : ''}" data-action="select-compendium-result" data-index="${index}" draggable="true" data-compendium-index="${index}">
       <div class="result-card__header">
         <div>
           <strong>${escapeHtml(result.name)}</strong>
           <div class="muted">${renderMetaBits(metaBits)}</div>
+          <div class="result-card__routes">${renderRouteChips(destinations)}</div>
         </div>
         <button class="button subtle" data-action="add-compendium" data-index="${index}">Add</button>
       </div>
-      <div class="result-card__body">${escapeHtml((result.description || 'No description available.').slice(0, 260))}</div>
     </article>
   `;
 }
@@ -2109,13 +3237,18 @@ function renderCompendiumDetail() {
   }
 
   const hasCharacter = Boolean(activeCharacter());
+  const destinations = getCompendiumDestinationLabels(result);
+  const description = getCompendiumDescription(result);
+  const higherLevelText = getCompendiumHigherLevelText(result);
 
   return `
     <div class="compendium-detail__card">
       <div class="section-title">Selected Entry</div>
       <h3 class="compendium-detail__title">${escapeHtml(result.name)}</h3>
       <div class="muted">${renderMetaBits([result.sourceCode || '', result.level != null ? `Level ${result.level}` : '', result.featureType || ''])}</div>
-      <p class="compendium-detail__copy">${escapeHtml(result.description || 'No description available.')}</p>
+      <div class="compendium-detail__routes">${renderRouteChips(destinations)}</div>
+      <p class="compendium-detail__copy">${escapeHtml(description || 'No description available.')}</p>
+      ${higherLevelText ? `<div class="compendium-detail__section"><div class="section-title">Higher Levels</div><p class="compendium-detail__copy">${escapeHtml(higherLevelText)}</p></div>` : ''}
       <div class="button-row">
         <button class="button primary" data-action="add-compendium" data-index="${escapeHtml(String(state.compendiumDetailIndex))}" ${hasCharacter ? '' : 'disabled'}>${hasCharacter ? 'Add to Sheet' : 'Select a Character'}</button>
       </div>
@@ -2322,6 +3455,7 @@ function renderApp() {
       </div>
       ${renderCreateFlowModal()}
       ${renderWizardModal()}
+      ${renderSheetEntryModal()}
     </div>
   `;
 }
@@ -2379,6 +3513,7 @@ async function handleActionClick(event) {
       case 'back-to-roster':
         state.activeCharacterId = null;
         state.sheetTab = 'core';
+        state.sheetEntryModal = null;
         if (!state.compendiumPinned) {
           state.compendiumHidden = true;
         }
@@ -2387,6 +3522,7 @@ async function handleActionClick(event) {
       case 'select-character':
         state.activeCharacterId = target.dataset.characterId;
         state.sheetTab = 'core';
+        state.sheetEntryModal = null;
         if (!state.compendiumPinned) {
           state.compendiumHidden = true;
         }
@@ -2457,6 +3593,12 @@ async function handleActionClick(event) {
       case 'close-wizard':
         closeWizard();
         break;
+      case 'open-sheet-entry':
+        openSheetEntryModal(target.dataset.list, target.dataset.index);
+        break;
+      case 'close-sheet-entry':
+        closeSheetEntryModal();
+        break;
       case 'wizard-prev':
         if (state.wizard) {
           state.wizard.step = Math.max(0, state.wizard.step - 1);
@@ -2494,18 +3636,33 @@ async function handleActionClick(event) {
       case 'roll-dice':
         await rollDice();
         break;
+      case 'toggle-equip': {
+        const character = activeCharacter();
+        const entry = character?.data?.inventory?.[Number(target.dataset.index)];
+        if (!entry) {
+          return;
+        }
+        entry.equipped = !entry.equipped;
+        render();
+        break;
+      }
+      case 'roll-sheet-formula':
+        await rollDiceFormula(target.dataset.formula, target.dataset.label || 'Sheet Roll');
+        break;
       case 'add-entry': {
         const character = activeCharacter();
         if (!character) {
           return;
         }
         const list = target.dataset.list;
-        if (list === 'inventory') {
-          character.data.inventory.push({ name: '', quantity: 1, notes: '' });
+        if (list === 'attacks') {
+          character.data.attacks.push(createDefaultAttack());
+        } else if (list === 'inventory') {
+          character.data.inventory.push(createDefaultInventoryEntry());
         } else if (list === 'spells') {
-          character.data.spells.push({ name: '', level: 0, description: '' });
+          character.data.spells.push(createDefaultSpellEntry());
         } else {
-          character.data.features.push({ name: '', source: '', description: '' });
+          character.data.features.push(createDefaultFeatureEntry());
         }
         render();
         break;
@@ -2518,6 +3675,9 @@ async function handleActionClick(event) {
         const list = target.dataset.list;
         const index = Number(target.dataset.index);
         character.data[list].splice(index, 1);
+        if (state.sheetEntryModal?.listName === list) {
+          state.sheetEntryModal = null;
+        }
         render();
         break;
       }
@@ -2580,25 +3740,22 @@ function handleInput(event) {
   const target = event.target;
 
   if (target.matches('[data-bind]')) {
-    const isNumber = target.type === 'number';
-    updateActiveCharacter(target.dataset.bind, isNumber ? Number(target.value || 0) : target.value);
+    updateActiveCharacter(target.dataset.bind, readFormControlValue(target));
     return;
   }
 
   if (target.matches('[data-list][data-field]')) {
-    const isNumber = target.type === 'number';
     updateListEntry(
       target.dataset.list,
       Number(target.dataset.index),
       target.dataset.field,
-      isNumber ? Number(target.value || 0) : target.value
+      readFormControlValue(target)
     );
     return;
   }
 
   if (target.matches('[data-wizard-bind]')) {
-    const isNumber = target.type === 'number';
-    updateWizardDraft(target.dataset.wizardBind, isNumber ? Number(target.value || 0) : target.value);
+    updateWizardDraft(target.dataset.wizardBind, readFormControlValue(target));
     render();
     return;
   }
@@ -2656,8 +3813,7 @@ async function handleChange(event) {
     }
 
     if (target.matches('[data-wizard-bind]')) {
-      const isNumber = target.type === 'number';
-      updateWizardDraft(target.dataset.wizardBind, isNumber ? Number(target.value || 0) : target.value);
+      updateWizardDraft(target.dataset.wizardBind, readFormControlValue(target));
       render();
       return;
     }
@@ -2670,9 +3826,18 @@ async function handleChange(event) {
       return;
     }
 
+    if (target.matches('[data-list][data-field]')) {
+      updateListEntry(
+        target.dataset.list,
+        Number(target.dataset.index),
+        target.dataset.field,
+        readFormControlValue(target)
+      );
+      return;
+    }
+
     if (target.matches('[data-bind]')) {
-      const isNumber = target.type === 'number';
-      updateActiveCharacter(target.dataset.bind, isNumber ? Number(target.value || 0) : target.value);
+      updateActiveCharacter(target.dataset.bind, readFormControlValue(target));
     }
   } catch (error) {
     setMessage('error', error.message);

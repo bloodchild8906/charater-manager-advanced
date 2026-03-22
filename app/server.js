@@ -237,9 +237,17 @@ function buildDefaultCharacterData() {
     ac: 10,
     speed: 30,
     initiative: 0,
+    skillRanks: {},
+    skillBonuses: {},
     conditions: [],
+    attacks: [],
     inventory: [],
     spells: [],
+    spellcasting: {
+      ability: '',
+      attackBonus: 0,
+      saveDcBonus: 0,
+    },
     features: [],
     notes: '',
   };
@@ -251,6 +259,9 @@ function sanitizeCharacterPayload(payload) {
   const data = input.data && typeof input.data === 'object' ? input.data : input;
   const abilities = data.abilities && typeof data.abilities === 'object' ? data.abilities : {};
   const hp = data.hp && typeof data.hp === 'object' ? data.hp : {};
+  const skillRanks = data.skillRanks && typeof data.skillRanks === 'object' ? data.skillRanks : {};
+  const skillBonuses = data.skillBonuses && typeof data.skillBonuses === 'object' ? data.skillBonuses : {};
+  const spellcasting = data.spellcasting && typeof data.spellcasting === 'object' ? data.spellcasting : {};
 
   const characterData = {
     ...base,
@@ -278,9 +289,25 @@ function sanitizeCharacterPayload(payload) {
     ac: normalizeInteger(data.ac, base.ac, 0, 99),
     speed: normalizeInteger(data.speed, base.speed, 0, 120),
     initiative: normalizeInteger(data.initiative, base.initiative, -20, 20),
+    skillRanks: Object.fromEntries(
+      Object.entries(skillRanks)
+        .slice(0, 40)
+        .map(([key, value]) => [String(key).slice(0, 64), String(value || 'none').slice(0, 32)])
+    ),
+    skillBonuses: Object.fromEntries(
+      Object.entries(skillBonuses)
+        .slice(0, 40)
+        .map(([key, value]) => [String(key).slice(0, 64), normalizeInteger(value, 0, -20, 20)])
+    ),
     conditions: Array.isArray(data.conditions) ? data.conditions.slice(0, 20) : [],
+    attacks: Array.isArray(data.attacks) ? data.attacks.slice(0, 200) : [],
     inventory: Array.isArray(data.inventory) ? data.inventory.slice(0, 200) : [],
     spells: Array.isArray(data.spells) ? data.spells.slice(0, 200) : [],
+    spellcasting: {
+      ability: String(spellcasting.ability || '').slice(0, 16),
+      attackBonus: normalizeInteger(spellcasting.attackBonus, 0, -20, 20),
+      saveDcBonus: normalizeInteger(spellcasting.saveDcBonus, 0, -20, 20),
+    },
     features: Array.isArray(data.features) ? data.features.slice(0, 200) : [],
     notes: String(data.notes || '').slice(0, 10000),
   };

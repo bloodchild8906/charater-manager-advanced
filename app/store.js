@@ -314,7 +314,17 @@ function mapSearchResult(type, row) {
     code: row.code,
     name: row.name,
     description: row.short_description || row.description || row.higher_level_text || '',
+    fullDescription: row.description || '',
+    shortDescription: row.short_description || '',
+    higherLevelText: row.higher_level_text || '',
     level: row.level != null ? Number(row.level) : null,
+    levelRequired: row.level_required != null ? Number(row.level_required) : null,
+    attackType: row.attack_type || row.attackType || null,
+    damage: typeof row.damage_json === 'string' ? parseJson(row.damage_json, null) : row.damage_json || row.damage || null,
+    profile: typeof row.profile_json === 'string' ? parseJson(row.profile_json, null) : row.profile_json || row.profile || null,
+    properties: typeof row.properties_json === 'string' ? parseJson(row.properties_json, null) : row.properties_json || row.properties || null,
+    effects: typeof row.effects_json === 'string' ? parseJson(row.effects_json, null) : row.effects_json || row.effects || null,
+    tags: typeof row.tags_json === 'string' ? parseJson(row.tags_json, null) : row.tags_json || row.tags || null,
     featureType: row.feature_type || row.featureType || null,
     sourceCode: row.source_code || row.sourceCode || null,
     sourceName: row.source_name || row.sourceName || null,
@@ -728,7 +738,7 @@ async function searchCompendium({ type, query = '', edition = 'all', limit = 20 
 
       if (type === 'spells') {
         const result = await request.query(
-          `SELECT TOP (@limit) sp.[slug], sp.[code], sp.[name], sp.[description], sp.[higher_level_text], sp.[level], s.[code] AS source_code, s.[name] AS source_name
+          `SELECT TOP (@limit) sp.[slug], sp.[code], sp.[name], sp.[description], sp.[higher_level_text], sp.[level], sp.[attack_type], sp.[damage_json], sp.[tags_json], s.[code] AS source_code, s.[name] AS source_name
            FROM dbo.[spells] sp
            INNER JOIN dbo.[sources] s ON s.[id] = sp.[source_id]
            WHERE 1 = 1${sourceCondition}${trimmedQuery === '' ? '' : ' AND (sp.[name] LIKE @query OR sp.[description] LIKE @query OR sp.[higher_level_text] LIKE @query)'}
@@ -739,7 +749,7 @@ async function searchCompendium({ type, query = '', edition = 'all', limit = 20 
 
       if (type === 'items') {
         const result = await request.query(
-          `SELECT TOP (@limit) i.[slug], i.[code], i.[name], i.[description], s.[code] AS source_code, s.[name] AS source_name
+          `SELECT TOP (@limit) i.[slug], i.[code], i.[name], i.[description], i.[tags_json], i.[properties_json], i.[profile_json], s.[code] AS source_code, s.[name] AS source_name
            FROM dbo.[items] i
            INNER JOIN dbo.[sources] s ON s.[id] = i.[source_id]
            WHERE 1 = 1${sourceCondition}${trimmedQuery === '' ? '' : ' AND (i.[name] LIKE @query OR i.[description] LIKE @query)'}
@@ -749,7 +759,7 @@ async function searchCompendium({ type, query = '', edition = 'all', limit = 20 
       }
 
       const result = await request.query(
-        `SELECT TOP (@limit) f.[slug], f.[code], f.[name], f.[description], f.[short_description], f.[feature_type], s.[code] AS source_code, s.[name] AS source_name
+        `SELECT TOP (@limit) f.[slug], f.[code], f.[name], f.[description], f.[short_description], f.[feature_type], f.[effects_json], f.[tags_json], f.[level_required], s.[code] AS source_code, s.[name] AS source_name
          FROM dbo.[features] f
          INNER JOIN dbo.[sources] s ON s.[id] = f.[source_id]
          WHERE 1 = 1${sourceCondition}${trimmedQuery === '' ? '' : ' AND (f.[name] LIKE @query OR f.[description] LIKE @query OR f.[short_description] LIKE @query)'}
@@ -801,7 +811,7 @@ async function searchCompendium({ type, query = '', edition = 'all', limit = 20 
         return withSqlite((db) =>
           db
             .prepare(
-              `SELECT sp.slug, sp.code, sp.name, sp.description, sp.higher_level_text, sp.level, s.code AS source_code, s.name AS source_name
+              `SELECT sp.slug, sp.code, sp.name, sp.description, sp.higher_level_text, sp.level, sp.attack_type, sp.damage_json, sp.tags_json, s.code AS source_code, s.name AS source_name
                FROM spells sp
                INNER JOIN sources s ON s.id = sp.source_id
                WHERE 1 = 1${sourceCondition}${trimmedQuery === '' ? '' : ' AND (sp.name LIKE ? OR sp.description LIKE ? OR sp.higher_level_text LIKE ?)'}
@@ -821,7 +831,7 @@ async function searchCompendium({ type, query = '', edition = 'all', limit = 20 
         return withSqlite((db) =>
           db
             .prepare(
-              `SELECT i.slug, i.code, i.name, i.description, s.code AS source_code, s.name AS source_name
+              `SELECT i.slug, i.code, i.name, i.description, i.tags_json, i.properties_json, i.profile_json, s.code AS source_code, s.name AS source_name
                FROM items i
                INNER JOIN sources s ON s.id = i.source_id
                WHERE 1 = 1${sourceCondition}${trimmedQuery === '' ? '' : ' AND (i.name LIKE ? OR i.description LIKE ?)'}
@@ -840,7 +850,7 @@ async function searchCompendium({ type, query = '', edition = 'all', limit = 20 
       return withSqlite((db) =>
         db
           .prepare(
-            `SELECT f.slug, f.code, f.name, f.description, f.short_description, f.feature_type, s.code AS source_code, s.name AS source_name
+            `SELECT f.slug, f.code, f.name, f.description, f.short_description, f.feature_type, f.effects_json, f.tags_json, f.level_required, s.code AS source_code, s.name AS source_name
              FROM features f
              INNER JOIN sources s ON s.id = f.source_id
              WHERE 1 = 1${sourceCondition}${trimmedQuery === '' ? '' : ' AND (f.name LIKE ? OR f.description LIKE ? OR f.short_description LIKE ?)'}

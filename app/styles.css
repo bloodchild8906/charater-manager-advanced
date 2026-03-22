@@ -305,6 +305,22 @@ a {
   gap: 8px;
 }
 
+.field--inline {
+  min-width: 0;
+}
+
+.field--checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+}
+
+.field--checkbox input {
+  inline-size: 18px;
+  block-size: 18px;
+}
+
 .label {
   color: var(--text-dim);
 }
@@ -357,6 +373,10 @@ a {
   gap: 12px;
 }
 
+.button-row--tight {
+  gap: 8px;
+}
+
 .button {
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.04);
@@ -387,12 +407,24 @@ a {
   border-color: rgba(208, 109, 109, 0.28);
 }
 
+.button--small {
+  padding: 9px 14px;
+  font-size: 0.84rem;
+}
+
 .button:focus-visible,
 .tab:focus-visible,
 .character-pill:focus-visible,
 .condition-chip:focus-visible {
   outline: none;
   box-shadow: 0 0 0 4px rgba(121, 193, 190, 0.18);
+}
+
+.button:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .auth-actions {
@@ -670,6 +702,37 @@ a {
   line-height: 1;
 }
 
+.roll-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(121, 193, 190, 0.26);
+  background: rgba(121, 193, 190, 0.1);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.route-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(212, 170, 87, 0.22);
+  background: rgba(212, 170, 87, 0.08);
+  color: var(--text-soft);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .editor-grid {
   display: grid;
   gap: 14px;
@@ -729,6 +792,12 @@ a {
   text-align: center;
 }
 
+.ability-card__top {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+
 .ability-card__label,
 .ability-card strong {
   display: block;
@@ -761,9 +830,90 @@ a {
   color: var(--accent-strong);
 }
 
+.roll-action {
+  white-space: nowrap;
+}
+
+.roll-action--inline {
+  justify-self: center;
+}
+
+.roll-action--sheet {
+  justify-self: end;
+}
+
+.skill-list {
+  display: grid;
+  gap: 12px;
+}
+
+.skill-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.3fr) 90px minmax(170px, 0.9fr) 120px auto;
+  gap: 12px;
+  align-items: end;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.skill-row__copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.skill-row__copy strong {
+  font-family: var(--heading);
+  font-size: 1.18rem;
+  line-height: 1;
+}
+
+.skill-row__modifier {
+  align-self: center;
+  justify-self: center;
+  font-family: var(--heading);
+  font-size: 1.4rem;
+  color: var(--accent-strong);
+}
+
+.attack-grid,
+.spellcasting-grid,
+.spell-entry-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.entry-top--stack {
+  align-items: flex-start;
+}
+
+.entry-top--stack .button-row {
+  justify-content: flex-end;
+}
+
 .entry,
 .result-card {
   padding: 16px;
+}
+
+.sheet-entry-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sheet-entry-row__copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sheet-entry-row__copy strong {
+  font-family: var(--heading);
+  font-size: 1.18rem;
+  line-height: 1;
 }
 
 .entry--compact {
@@ -824,6 +974,18 @@ a {
 
 .result-card__header {
   margin-bottom: 12px;
+}
+
+.result-card--compact .result-card__header {
+  margin-bottom: 0;
+}
+
+.result-card__routes,
+.compendium-detail__routes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .result-card__body {
@@ -907,6 +1069,14 @@ a {
 
 .dice-stage__formula {
   color: var(--text-dim);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.dice-stage__label {
+  color: var(--accent-strong);
   font-size: 0.82rem;
   font-weight: 800;
   letter-spacing: 0.16em;
@@ -1474,6 +1644,10 @@ a {
   align-items: start;
 }
 
+.sheet-card--wide {
+  grid-column: 1 / -1;
+}
+
 .sheet-card--hero {
   grid-column: 1 / -1;
   padding: 24px;
@@ -1531,6 +1705,10 @@ a {
 
 .modal-panel--wizard {
   width: min(960px, 100%);
+}
+
+.modal-panel--entry {
+  width: min(720px, 100%);
 }
 
 .modal-panel--compendium {
@@ -1983,6 +2161,11 @@ a {
 .compendium-detail__copy {
   color: var(--text-soft);
   line-height: 1.7;
+  white-space: pre-line;
+}
+
+.compendium-detail__section {
+  margin-top: 18px;
 }
 
 .compendium-detail__empty {
@@ -2045,6 +2228,16 @@ a {
   white-space: nowrap;
 }
 
+.sheet-entry-modal__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.sheet-entry-modal__full {
+  grid-column: 1 / -1;
+}
+
 .dice-panel__controls {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 14px;
@@ -2066,8 +2259,24 @@ a {
   .wizard-ability-grid,
   .wizard-review-grid,
   .compendium-modal__layout,
-  .sheet-header__summary {
+  .sheet-header__summary,
+  .sheet-entry-modal__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .attack-grid,
+  .spellcasting-grid,
+  .spell-entry-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .skill-row {
+    grid-template-columns: minmax(0, 1fr) 90px repeat(2, minmax(140px, 1fr));
+  }
+
+  .skill-row .roll-action--sheet {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 }
 
@@ -2111,6 +2320,24 @@ a {
 
   .sheet-header__summary {
     grid-template-columns: 1fr;
+  }
+
+  .skill-row,
+  .attack-grid,
+  .spellcasting-grid,
+  .spell-entry-grid,
+  .sheet-entry-modal__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .skill-row__modifier,
+  .roll-action--sheet {
+    justify-self: start;
+  }
+
+  .sheet-entry-row {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .compendium-window {
