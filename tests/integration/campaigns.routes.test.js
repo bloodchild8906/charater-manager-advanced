@@ -66,11 +66,12 @@ describe('Campaign Routes Integration Tests', () => {
 
     await ensureAppStorage();
 
-    // Create GM user
+    // Create GM user with unique email to avoid conflicts
+    const gmEmail = `gm-${Date.now()}@test.com`;
     const { salt: gmSalt, hash: gmHash } = hashPassword('password123');
     gmUser = await createUser({
       id: createId(),
-      email: 'gm@test.com',
+      email: gmEmail,
       display_name: 'Test GM',
       password_hash: gmHash,
       password_salt: gmSalt,
@@ -79,11 +80,12 @@ describe('Campaign Routes Integration Tests', () => {
       updated_at: nowIso(),
     });
 
-    // Create player user
+    // Create player user with unique email to avoid conflicts
+    const playerEmail = `player-${Date.now()}@test.com`;
     const { salt: playerSalt, hash: playerHash } = hashPassword('password123');
     playerUser = await createUser({
       id: createId(),
-      email: 'player@test.com',
+      email: playerEmail,
       display_name: 'Test Player',
       password_hash: playerHash,
       password_salt: playerSalt,
