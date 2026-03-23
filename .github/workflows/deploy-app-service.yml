@@ -179,6 +179,11 @@ jobs:
           test -f deploy-package/app/app.js     && echo "  ✅ app/app.js"    || { echo "  ❌ app/app.js MISSING";    exit 1; }
           test ! -d deploy-package/app/app      && echo "  ✅ No app/app collision" || { echo "  ❌ app/app/ collision detected"; exit 1; }
 
+          echo ""
+          echo "Verifying scripts directory:"
+          test -f deploy-package/scripts/sqliteAppBaseSchema.cjs && echo "  ✅ scripts/sqliteAppBaseSchema.cjs" || { echo "  ❌ scripts/sqliteAppBaseSchema.cjs MISSING"; exit 1; }
+          test -d deploy-package/scripts/built && echo "  ✅ scripts/built directory" || echo "  ⚠️  scripts/built directory missing"
+
           DICE_COUNT=$(find deploy-package/app/vendor/dice-box -type f | wc -l | xargs)
           echo ""
           echo "Vendor assets:"
@@ -264,6 +269,10 @@ jobs:
           echo "Artifact file count: ${FILE_COUNT}"
           test -f deploy-package/app/server.js && echo "✅ server.js present" || { echo "❌ server.js MISSING"; exit 1; }
           test -f deploy-package/app/app.js    && echo "✅ app.js present"    || { echo "❌ app.js MISSING";    exit 1; }
+          test -f deploy-package/scripts/sqliteAppBaseSchema.cjs && echo "✅ sqliteAppBaseSchema.cjs present" || { echo "❌ sqliteAppBaseSchema.cjs MISSING"; exit 1; }
+          echo ""
+          echo "Scripts directory contents:"
+          ls -la deploy-package/scripts/ || echo "Scripts directory not found"
 
       # ── Azure Login ────────────────────────────────────────────────────────────
       - name: 🔐 Azure login
