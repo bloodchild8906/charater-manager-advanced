@@ -9,3 +9,12 @@
 @import url("/styles/components/compendium-window.css");
 @import url("/styles/components/dice-toolbar.css");
 @import url("/styles/components/modals.css");
+@import url("/styles/components/campaign-dashboard.css");
+@import url("/styles/components/campaign-members.css");
+@import url("/styles/components/campaign-dm-sheet.css");
+@import url("/styles/components/campaign-sessions.css");
+@import url("/styles/components/campaign-events.css");
+@import url("/styles/components/campaign-compendium.css");
+@import url("/styles/components/campaign-initiative.css");
+@import url("/styles/components/campaign-hp-grid.css");
+@import url("/styles/components/campaign-invites.css");

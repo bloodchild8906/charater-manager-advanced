@@ -2,6 +2,7 @@ import { getSqliteDbPath, openSqliteDatabase, resetSqliteDatabase } from './dbUt
 import { createNormalizedSchema } from './normalizedSchema';
 import { seedNormalizedDatabase } from './seedNormalizedDatabase';
 import { runCampaignMigrationsUp } from './runCampaignMigrations';
+import { seedAppData } from './seedAppData';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { SQLITE_APP_BASE_SCHEMA_SQL } = require('./sqliteAppBaseSchema.cjs');
@@ -17,6 +18,7 @@ function main() {
     db.exec(SQLITE_APP_BASE_SCHEMA_SQL);
     runCampaignMigrationsUp(db);
     seedNormalizedDatabase(db);
+    seedAppData(db);
     console.log('Database refresh completed successfully.');
   } catch (error) {
     console.error('Database refresh failed:', error);

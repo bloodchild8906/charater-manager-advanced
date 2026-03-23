@@ -1,0 +1,144 @@
+/* Initiative Tracker Panel Styles */
+
+.initiative-tracker-panel {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    width: 450px;
+    max-height: calc(100vh - 100px);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+}
+
+.initiative-tracker-panel__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.initiative-tracker-panel__header h3 {
+    margin: 0;
+    font-size: var(--font-size-lg);
+}
+
+.initiative-tracker-panel__round {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-1);
+}
+
+.initiative-tracker-panel__controls {
+    display: flex;
+    gap: var(--spacing-2);
+    padding: var(--spacing-3);
+    border-bottom: 1px solid var(--color-border);
+    flex-wrap: wrap;
+}
+
+.initiative-tracker-panel__body {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--spacing-3);
+}
+
+.initiative-tracker-panel__footer {
+    padding: var(--spacing-3);
+    border-top: 1px solid var(--color-border);
+}
+
+/* Initiative List */
+.initiative-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+}
+
+.initiative-row {
+    display: grid;
+    grid-template-columns: 60px 60px 1fr 80px 40px;
+    gap: var(--spacing-2);
+    align-items: center;
+    padding: var(--spacing-2);
+    background: var(--color-background);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    transition: all 0.2s;
+}
+
+.initiative-row--current {
+    background: var(--color-primary-light);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary-light);
+}
+
+.initiative-row__order {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.initiative-row__initiative {
+    display: flex;
+}
+
+.initiative-input {
+    width: 60px;
+    text-align: center;
+    font-weight: 600;
+}
+
+.initiative-row__name {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.initiative-row__hp {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+.initiative-row__actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Add NPC Form */
+.add-npc-form {
+    display: grid;
+    grid-template-columns: 1fr 80px 60px auto;
+    gap: var(--spacing-2);
+}
+
+/* Button sizes */
+.button.tiny,
+.input.tiny {
+    padding: 2px 6px;
+    font-size: var(--font-size-xs);
+    height: 24px;
+}
+
+.button-icon.small {
+    padding: 2px 4px;
+    font-size: var(--font-size-xs);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-secondary);
+}
+
+.button-icon.small:hover {
+    color: var(--color-primary);
+}
+
+.button-icon.small:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}

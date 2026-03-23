@@ -1,0 +1,183 @@
+/* Campaign Events Tab Styles */
+
+.events-tab {
+    padding: var(--spacing-4);
+}
+
+.events-tab__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-4);
+}
+
+.view-mode-toggle {
+    display: flex;
+    gap: var(--spacing-2);
+}
+
+/* Event Card */
+.event-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-left: 4px solid var(--color-primary);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-4);
+    margin-bottom: var(--spacing-3);
+    transition: box-shadow 0.2s;
+}
+
+.event-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.event-card--applied {
+    opacity: 0.7;
+    border-left-color: var(--color-success);
+}
+
+.event-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--spacing-3);
+}
+
+.event-card__type {
+    display: flex;
+    gap: var(--spacing-2);
+    margin-bottom: var(--spacing-2);
+}
+
+.event-card__title {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    margin: 0;
+}
+
+.event-card__meta {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.event-card__description {
+    margin-bottom: var(--spacing-3);
+    color: var(--color-text-secondary);
+}
+
+.event-card__actions {
+    display: flex;
+    gap: var(--spacing-2);
+    padding-top: var(--spacing-3);
+    border-top: 1px solid var(--color-border);
+}
+
+/* Event Payload */
+.event-payload {
+    padding: var(--spacing-3);
+    background: var(--color-background);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--spacing-3);
+}
+
+.loot-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-1);
+}
+
+/* Log Event Form */
+.log-event-form {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-4);
+    margin-bottom: var(--spacing-4);
+}
+
+.log-event-form__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-4);
+}
+
+.log-event-form__header h3 {
+    margin: 0;
+    font-size: var(--font-size-lg);
+}
+
+/* Event Timeline */
+.event-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-4);
+}
+
+.timeline-session {
+    border-left: 2px solid var(--color-border);
+    padding-left: var(--spacing-4);
+}
+
+.timeline-session__title {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    margin: 0 0 var(--spacing-3) 0;
+    color: var(--color-text-primary);
+}
+
+.timeline-events {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Loot Chest */
+.loot-chest {
+    display: flex;
+    flex-direction: column;
+}
+
+.loot-chest__header {
+    margin-bottom: var(--spacing-4);
+}
+
+.loot-chest__header h3 {
+    margin: 0 0 var(--spacing-1) 0;
+    font-size: var(--font-size-xl);
+}
+
+.loot-list {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Badge Colors */
+.badge--primary {
+    background: var(--color-primary);
+    color: white;
+}
+
+.badge--success {
+    background: var(--color-success);
+    color: white;
+}
+
+.badge--danger {
+    background: var(--color-danger);
+    color: white;
+}
+
+.badge--warning {
+    background: var(--color-warning);
+    color: var(--color-text-primary);
+}
+
+.badge--info {
+    background: var(--color-info);
+    color: white;
+}
+
+.badge--muted {
+    background: var(--color-muted);
+    color: var(--color-text-secondary);
+}

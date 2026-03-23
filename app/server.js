@@ -831,6 +831,374 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    // Campaign character sheet routes (Task 5)
+    const campaignCharacterMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/characters\/([^/]+)$/);
+    if (campaignCharacterMatch) {
+      request.params = {
+        id: decodeURIComponent(campaignCharacterMatch[1]),
+        characterId: decodeURIComponent(campaignCharacterMatch[2]),
+      };
+      request.user = currentUser;
+
+      if (request.method === 'GET') {
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireCampaignCharacterAccess(request, res, async () => {
+          await campaignRoutes.handleGetDMCharacterSheet(request, res);
+        });
+        return;
+      }
+
+      if (request.method === 'PATCH') {
+        const body = await readJsonBody(request);
+        request.body = body;
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireDM(request, res, async () => {
+          await campaignRoutes.handlePatchDMCharacterSheet(request, res);
+        });
+        return;
+      }
+    }
+
+    const campaignCharacterAwardXpMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/characters\/([^/]+)\/award-xp$/);
+    if (campaignCharacterAwardXpMatch && request.method === 'POST') {
+      const body = await readJsonBody(request);
+      request.params = {
+        id: decodeURIComponent(campaignCharacterAwardXpMatch[1]),
+        characterId: decodeURIComponent(campaignCharacterAwardXpMatch[2]),
+      };
+      request.user = currentUser;
+      request.body = body;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleAwardXP(request, res);
+      });
+      return;
+    }
+
+    const campaignCharacterDamageMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/characters\/([^/]+)\/apply-damage$/);
+    if (campaignCharacterDamageMatch && request.method === 'POST') {
+      const body = await readJsonBody(request);
+      request.params = {
+        id: decodeURIComponent(campaignCharacterDamageMatch[1]),
+        characterId: decodeURIComponent(campaignCharacterDamageMatch[2]),
+      };
+      request.user = currentUser;
+      request.body = body;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleApplyDamage(request, res);
+      });
+      return;
+    }
+
+    const campaignCharacterHealingMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/characters\/([^/]+)\/apply-healing$/);
+    if (campaignCharacterHealingMatch && request.method === 'POST') {
+      const body = await readJsonBody(request);
+      request.params = {
+        id: decodeURIComponent(campaignCharacterHealingMatch[1]),
+        characterId: decodeURIComponent(campaignCharacterHealingMatch[2]),
+      };
+      request.user = currentUser;
+      request.body = body;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleApplyHealing(request, res);
+      });
+      return;
+    }
+
+    const campaignCharacterGrantItemMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/characters\/([^/]+)\/grant-item$/);
+    if (campaignCharacterGrantItemMatch && request.method === 'POST') {
+      const body = await readJsonBody(request);
+      request.params = {
+        id: decodeURIComponent(campaignCharacterGrantItemMatch[1]),
+        characterId: decodeURIComponent(campaignCharacterGrantItemMatch[2]),
+      };
+      request.user = currentUser;
+      request.body = body;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleGrantItem(request, res);
+      });
+      return;
+    }
+
+    const campaignCharacterConditionMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/characters\/([^/]+)\/apply-condition$/);
+    if (campaignCharacterConditionMatch && request.method === 'POST') {
+      const body = await readJsonBody(request);
+      request.params = {
+        id: decodeURIComponent(campaignCharacterConditionMatch[1]),
+        characterId: decodeURIComponent(campaignCharacterConditionMatch[2]),
+      };
+      request.user = currentUser;
+      request.body = body;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleApplyCondition(request, res);
+      });
+      return;
+    }
+
+    const campaignCharacterRemoveConditionMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/characters\/([^/]+)\/conditions\/([^/]+)$/);
+    if (campaignCharacterRemoveConditionMatch && request.method === 'DELETE') {
+      request.params = {
+        id: decodeURIComponent(campaignCharacterRemoveConditionMatch[1]),
+        characterId: decodeURIComponent(campaignCharacterRemoveConditionMatch[2]),
+        condition: decodeURIComponent(campaignCharacterRemoveConditionMatch[3]),
+      };
+      request.user = currentUser;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleRemoveCondition(request, res);
+      });
+      return;
+    }
+
+    const campaignBulkActionMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/bulk-action$/);
+    if (campaignBulkActionMatch && request.method === 'POST') {
+      const body = await readJsonBody(request);
+      request.params = { id: decodeURIComponent(campaignBulkActionMatch[1]) };
+      request.user = currentUser;
+      request.body = body;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleBulkAction(request, res);
+      });
+      return;
+    }
+
+    // Campaign session routes (Task 6)
+    const campaignSessionsMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/sessions$/);
+    if (campaignSessionsMatch) {
+      request.params = { id: decodeURIComponent(campaignSessionsMatch[1]) };
+      request.user = currentUser;
+
+      if (request.method === 'POST') {
+        const body = await readJsonBody(request);
+        request.body = body;
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireDM(request, res, async () => {
+          await campaignRoutes.handleCreateSession(request, res);
+        });
+        return;
+      }
+
+      if (request.method === 'GET') {
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireCampaignMember(request, res, async () => {
+          await campaignRoutes.handleGetSessions(request, res);
+        });
+        return;
+      }
+    }
+
+    const campaignSessionMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/sessions\/([^/]+)$/);
+    if (campaignSessionMatch && request.method === 'PATCH') {
+      const body = await readJsonBody(request);
+      request.params = {
+        id: decodeURIComponent(campaignSessionMatch[1]),
+        sessionId: decodeURIComponent(campaignSessionMatch[2]),
+      };
+      request.user = currentUser;
+      request.body = body;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleUpdateSession(request, res);
+      });
+      return;
+    }
+
+    const campaignSessionAttendanceMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/sessions\/([^/]+)\/attendance$/);
+    if (campaignSessionAttendanceMatch && request.method === 'POST') {
+      const body = await readJsonBody(request);
+      request.params = {
+        id: decodeURIComponent(campaignSessionAttendanceMatch[1]),
+        sessionId: decodeURIComponent(campaignSessionAttendanceMatch[2]),
+      };
+      request.user = currentUser;
+      request.body = body;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleUpdateAttendance(request, res);
+      });
+      return;
+    }
+
+    // Campaign event routes (Task 6)
+    const campaignEventsMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/events$/);
+    if (campaignEventsMatch) {
+      request.params = { id: decodeURIComponent(campaignEventsMatch[1]) };
+      request.user = currentUser;
+      request.query = Object.fromEntries(url.searchParams);
+
+      if (request.method === 'POST') {
+        const body = await readJsonBody(request);
+        request.body = body;
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireDM(request, res, async () => {
+          await campaignRoutes.handleCreateEvent(request, res);
+        });
+        return;
+      }
+
+      if (request.method === 'GET') {
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireCampaignMember(request, res, async () => {
+          await campaignRoutes.handleGetEvents(request, res);
+        });
+        return;
+      }
+    }
+
+    const campaignEventApplyMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/events\/([^/]+)\/apply$/);
+    if (campaignEventApplyMatch && request.method === 'POST') {
+      const body = await readJsonBody(request);
+      request.params = {
+        id: decodeURIComponent(campaignEventApplyMatch[1]),
+        eventId: decodeURIComponent(campaignEventApplyMatch[2]),
+      };
+      request.user = currentUser;
+      request.body = body;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleApplyEvent(request, res);
+      });
+      return;
+    }
+
+    // Campaign compendium routes (Task 7)
+    const campaignCompendiumMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/compendium$/);
+    if (campaignCompendiumMatch) {
+      request.params = { id: decodeURIComponent(campaignCompendiumMatch[1]) };
+      request.user = currentUser;
+      request.query = Object.fromEntries(url.searchParams);
+
+      if (request.method === 'GET') {
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireCampaignMember(request, res, async () => {
+          await campaignRoutes.handleGetCompendium(request, res);
+        });
+        return;
+      }
+
+      if (request.method === 'POST') {
+        const body = await readJsonBody(request);
+        request.body = body;
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireDM(request, res, async () => {
+          await campaignRoutes.handleCreateCompendiumEntry(request, res);
+        });
+        return;
+      }
+    }
+
+    const campaignCompendiumEntryMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/compendium\/([^/]+)$/);
+    if (campaignCompendiumEntryMatch) {
+      request.params = {
+        id: decodeURIComponent(campaignCompendiumEntryMatch[1]),
+        entryId: decodeURIComponent(campaignCompendiumEntryMatch[2]),
+      };
+      request.user = currentUser;
+
+      if (request.method === 'GET') {
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireCampaignMember(request, res, async () => {
+          await campaignRoutes.handleGetCompendiumEntry(request, res);
+        });
+        return;
+      }
+
+      if (request.method === 'PATCH') {
+        const body = await readJsonBody(request);
+        request.body = body;
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireDM(request, res, async () => {
+          await campaignRoutes.handleUpdateCompendiumEntry(request, res);
+        });
+        return;
+      }
+
+      if (request.method === 'DELETE') {
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireDM(request, res, async () => {
+          await campaignRoutes.handleDeleteCompendiumEntry(request, res);
+        });
+        return;
+      }
+    }
+
+    const campaignCompendiumGrantMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/compendium\/([^/]+)\/grant$/);
+    if (campaignCompendiumGrantMatch && request.method === 'POST') {
+      const body = await readJsonBody(request);
+      request.params = {
+        id: decodeURIComponent(campaignCompendiumGrantMatch[1]),
+        entryId: decodeURIComponent(campaignCompendiumGrantMatch[2]),
+      };
+      request.user = currentUser;
+      request.body = body;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleGrantCompendiumEntry(request, res);
+      });
+      return;
+    }
+
+    // SSE stream route (Task 8)
+    const campaignStreamMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/stream$/);
+    if (campaignStreamMatch && request.method === 'GET') {
+      const campaignStreamRoutes = require('./routes/campaignStream');
+      request.params = { id: decodeURIComponent(campaignStreamMatch[1]) };
+      request.user = currentUser;
+      await campaignStreamRoutes.requireCampaignMember(request, response, async () => {
+        await campaignStreamRoutes.handleCampaignStream(request, response);
+      });
+      return;
+    }
+
     const adminUserMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
     if (pathname === '/api/admin/users' && request.method === 'GET') {
       if (!currentUser || currentUser.role !== 'admin') {

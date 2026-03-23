@@ -1,0 +1,219 @@
+/* Campaign Compendium Tab Styles */
+
+.compendium-tab {
+    padding: var(--spacing-4);
+    height: 100%;
+}
+
+.compendium-tab__layout {
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: var(--spacing-4);
+    height: calc(100vh - 200px);
+}
+
+.compendium-tab__sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+    overflow-y: auto;
+}
+
+.compendium-tab__detail {
+    overflow-y: auto;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-4);
+}
+
+/* Filters */
+.compendium-filters {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-4);
+}
+
+.compendium-filters__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-3);
+}
+
+.compendium-filters__header h3 {
+    margin: 0;
+    font-size: var(--font-size-lg);
+}
+
+.checkbox-field {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    cursor: pointer;
+}
+
+.checkbox-field input[type="checkbox"] {
+    cursor: pointer;
+}
+
+/* Entry Cards */
+.compendium-entries {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+}
+
+.compendium-entry-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-3);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.compendium-entry-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-color: var(--color-primary);
+}
+
+.compendium-entry-card.selected {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+}
+
+.compendium-entry-card__header {
+    margin-bottom: var(--spacing-2);
+}
+
+.compendium-entry-card__badges {
+    display: flex;
+    gap: var(--spacing-2);
+    margin-bottom: var(--spacing-2);
+}
+
+.compendium-entry-card__name {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    margin: 0;
+}
+
+.compendium-entry-card__description {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    margin: var(--spacing-2) 0;
+}
+
+.compendium-entry-card__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-1);
+    margin-top: var(--spacing-2);
+}
+
+.tag {
+    display: inline-block;
+    padding: var(--spacing-1) var(--spacing-2);
+    background: var(--color-background);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+}
+
+/* Entry Detail */
+.compendium-detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-4);
+}
+
+.compendium-detail__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: var(--spacing-3);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.compendium-detail__header h2 {
+    margin: var(--spacing-2) 0 0 0;
+    font-size: var(--font-size-xl);
+}
+
+.compendium-detail__badges {
+    display: flex;
+    gap: var(--spacing-2);
+    margin-bottom: var(--spacing-2);
+}
+
+.compendium-detail__actions {
+    display: flex;
+    gap: var(--spacing-2);
+}
+
+.compendium-detail__section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+}
+
+.compendium-detail__section h3 {
+    margin: 0;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+}
+
+.property-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+    margin: 0;
+}
+
+.property-item {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: var(--spacing-3);
+    padding: var(--spacing-2);
+    background: var(--color-background);
+    border-radius: var(--radius-sm);
+}
+
+.property-item dt {
+    font-weight: 600;
+    color: var(--color-text-secondary);
+}
+
+.property-item dd {
+    margin: 0;
+}
+
+.tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-2);
+}
+
+.grant-controls {
+    display: flex;
+    gap: var(--spacing-2);
+    align-items: center;
+}
+
+.grant-controls .select {
+    flex: 1;
+}
+
+/* Modal adjustments */
+#data-fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+    padding: var(--spacing-3);
+    background: var(--color-background);
+    border-radius: var(--radius-sm);
+    margin: var(--spacing-3) 0;
+}

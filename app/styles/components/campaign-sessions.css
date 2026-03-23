@@ -1,0 +1,130 @@
+/* Campaign Sessions Tab Styles */
+
+.sessions-tab {
+    padding: var(--spacing-4);
+}
+
+.sessions-tab__header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--spacing-4);
+}
+
+/* Session Card */
+.session-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-4);
+    margin-bottom: var(--spacing-3);
+    transition: box-shadow 0.2s;
+}
+
+.session-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.session-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--spacing-3);
+}
+
+.session-card__number {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--spacing-1);
+}
+
+.session-card__title {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    margin: 0;
+}
+
+.session-card__meta {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.session-card__summary {
+    margin-bottom: var(--spacing-3);
+    color: var(--color-text-secondary);
+}
+
+.session-card__footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: var(--spacing-3);
+    border-top: 1px solid var(--color-border);
+}
+
+.session-card__attendance {
+    display: flex;
+    gap: var(--spacing-2);
+    align-items: center;
+}
+
+/* Log Session Form */
+.log-session-form {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-4);
+    margin-bottom: var(--spacing-4);
+}
+
+.log-session-form__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-4);
+}
+
+.log-session-form__header h3 {
+    margin: 0;
+    font-size: var(--font-size-lg);
+}
+
+.field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-3);
+}
+
+.attendance-checkboxes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+    padding: var(--spacing-2);
+    background: var(--color-background);
+    border-radius: var(--radius-sm);
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    cursor: pointer;
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-2);
+    margin-top: var(--spacing-4);
+}
+
+/* Sessions List */
+.sessions-list {
+    display: flex;
+    flex-direction: column;
+}

@@ -45,6 +45,7 @@ import { renderDiceToolbarShell as renderDiceToolbarShellView } from './componen
 import { renderTopbar as renderTopbarView } from './components/topbar.js';
 import { initializePwa, promptPwaInstall } from './pwa.js';
 import { renderWizardModal as renderWizardModalView } from './renderers/wizard.js';
+import * as CampaignDashboard from './campaign-dashboard.js';
 import {
   abilityModifier,
   analyzeRollFormula,
@@ -129,6 +130,8 @@ const state = {
     canInstall: false,
     installed: false,
   },
+  campaignDashboardOpen: false,
+  pendingInviteCount: 0,
 };
 
 let diceBoxImportPromise = null;
@@ -1423,6 +1426,15 @@ async function loadBootstrap() {
     state.characters[0]?.id ||
     null;
   state.compendiumResults = [];
+
+  // Load pending invites count
+  try {
+    const invites = await CampaignDashboard.loadPendingInvites();
+    state.pendingInviteCount = invites.length;
+  } catch (error) {
+    console.error('Failed to load pending invites:', error);
+    state.pendingInviteCount = 0;
+  }
 
   if (diceBoxInstance) {
     try {
@@ -3285,6 +3297,7 @@ function renderSidebar() {
 function renderApp() {
   const character = activeCharacter();
   const focusMode = Boolean(character);
+  const campaignMode = state.campaignDashboardOpen;
 
   return `
     <div class="screen app-screen">
@@ -3297,11 +3310,21 @@ function renderApp() {
           editionFilter: state.editionFilter,
           editionOptions: EDITION_OPTIONS,
           canInstall: state.pwa.canInstall && !state.pwa.installed,
+          pendingInviteCount: state.pendingInviteCount,
         })}
         ${renderMessage()}
-        <div class="workspace ${focusMode ? 'workspace--sheet-focus' : ''}">
+        <div class="workspace ${focusMode ? 'workspace--sheet-focus' : ''} ${campaignMode ? 'workspace--campaign-mode' : ''}">
           ${
-            focusMode
+            campaignMode
+              ? `
+                  <aside class="sidebar">
+                    ${CampaignDashboard.renderCampaignSidebar()}
+                  </aside>
+                  <main class="editor">
+                    ${CampaignDashboard.renderCampaignDetail()}
+                  </main>
+                `
+              : focusMode
               ? ''
               : `
                   <aside class="sidebar">
@@ -3310,14 +3333,22 @@ function renderApp() {
                   </aside>
                 `
           }
-          <main class="editor ${focusMode ? 'editor--sheet-focus' : ''}">
-            ${renderEditor(character)}
-          </main>
+          ${!campaignMode && focusMode ? `
+            <main class="editor editor--sheet-focus">
+              ${renderEditor(character)}
+            </main>
+          ` : ''}
+          ${!campaignMode && !focusMode ? `
+            <main class="editor">
+              ${renderEditor(character)}
+            </main>
+          ` : ''}
         </div>
       </div>
       ${renderCreateFlowModal()}
       ${renderWizardModal()}
       ${renderSheetEntryModal()}
+      ${CampaignDashboard.renderCreateCampaignModal()}
     </div>
   `;
 }
@@ -3589,6 +3620,195 @@ async function handleActionClick(event) {
         await loadBootstrap();
         render();
         break;
+      case 'open-campaigns':
+        state.campaignDashboardOpen = true;
+        state.activeCharacterId = null;
+        await CampaignDashboard.loadCampaigns();
+        render();
+        break;
+      case 'create-campaign':
+        CampaignDashboard.openCreateModal();
+        render();
+        break;
+      case 'close-create-campaign-modal':
+        CampaignDashboard.closeCreateModal();
+        render();
+        break;
+      case 'next-wizard-step':
+        CampaignDashboard.nextWizardStep();
+        render();
+        break;
+      case 'prev-wizard-step':
+        CampaignDashboard.prevWizardStep();
+        render();
+        break;
+      case 'submit-create-campaign':
+        await CampaignDashboard.submitCreateCampaign();
+        setMessage('success', 'Campaign created successfully.');
+        render();
+        break;
+      case 'select-campaign':
+        CampaignDashboard.selectCampaign(target.dataset.campaignId);
+        render();
+        break;
+      case 'set-campaign-tab':
+        CampaignDashboard.setActiveTab(target.dataset.tab);
+        render();
+        break;
+      case 'save-campaign-settings': {
+        event.preventDefault();
+        const form = document.getElementById('campaign-settings-form');
+        if (!form) return;
+        
+        const formData = new FormData(form);
+        const campaign = CampaignDashboard.getActiveCampaign();
+        if (!campaign) return;
+        
+        try {
+          await api(`/api/campaigns/${campaign.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              name: formData.get('name'),
+              description: formData.get('description'),
+              bannerUrl: formData.get('bannerUrl'),
+              visibility: formData.get('visibility'),
+            }),
+          });
+          await CampaignDashboard.loadCampaigns();
+          setMessage('success', 'Campaign settings saved.');
+          render();
+        } catch (error) {
+          setMessage('error', error.message);
+        }
+        break;
+      }
+      case 'archive-campaign': {
+        const campaign = CampaignDashboard.getActiveCampaign();
+        if (!campaign) return;
+        
+        if (!window.confirm(`Are you sure you want to ${campaign.status === 'archived' ? 'unarchive' : 'archive'} this campaign?`)) {
+          return;
+        }
+        
+        try {
+          await api(`/api/campaigns/${campaign.id}/archive`, {
+            method: 'POST',
+            body: JSON.stringify({}),
+          });
+          await CampaignDashboard.loadCampaigns();
+          setMessage('success', `Campaign ${campaign.status === 'archived' ? 'unarchived' : 'archived'}.`);
+          render();
+        } catch (error) {
+          setMessage('error', error.message);
+        }
+        break;
+      }
+      case 'delete-campaign': {
+        const campaign = CampaignDashboard.getActiveCampaign();
+        if (!campaign) return;
+        
+        if (!window.confirm(`Are you sure you want to permanently delete "${campaign.name}"? This cannot be undone.`)) {
+          return;
+        }
+        
+        try {
+          await api(`/api/campaigns/${campaign.id}`, {
+            method: 'DELETE',
+            body: JSON.stringify({}),
+          });
+          await CampaignDashboard.loadCampaigns();
+          setMessage('success', 'Campaign deleted.');
+          render();
+        } catch (error) {
+          setMessage('error', error.message);
+        }
+        break;
+      }
+      case 'toggle-dm-controls': {
+        const memberId = target.dataset.memberId;
+        CampaignDashboard.CampaignMembers.toggleDMControls(memberId);
+        render();
+        break;
+      }
+      case 'open-dm-sheet': {
+        const campaignId = target.dataset.campaignId;
+        const characterId = target.dataset.characterId;
+        await CampaignDashboard.CampaignDMSheet.openAsDM(characterId, campaignId);
+        break;
+      }
+      case 'apply-damage': {
+        const campaignId = target.dataset.campaignId;
+        const characterId = target.dataset.characterId;
+        const memberId = target.dataset.memberId;
+        const input = document.getElementById(`damage-${memberId}`);
+        const amount = Number(input?.value || 0);
+        
+        if (amount <= 0) {
+          setMessage('error', 'Please enter a valid damage amount.');
+          return;
+        }
+        
+        try {
+          await CampaignDashboard.CampaignMembers.applyDamage(campaignId, characterId, amount);
+          setMessage('success', `Applied ${amount} damage.`);
+          if (input) input.value = '';
+          await CampaignDashboard.CampaignMembers.loadMembers(campaignId);
+          render();
+        } catch (error) {
+          setMessage('error', error.message);
+        }
+        break;
+      }
+      case 'apply-healing': {
+        const campaignId = target.dataset.campaignId;
+        const characterId = target.dataset.characterId;
+        const memberId = target.dataset.memberId;
+        const input = document.getElementById(`healing-${memberId}`);
+        const amount = Number(input?.value || 0);
+        
+        if (amount <= 0) {
+          setMessage('error', 'Please enter a valid healing amount.');
+          return;
+        }
+        
+        try {
+          await CampaignDashboard.CampaignMembers.applyHealing(campaignId, characterId, amount);
+          setMessage('success', `Applied ${amount} healing.`);
+          if (input) input.value = '';
+          await CampaignDashboard.CampaignMembers.loadMembers(campaignId);
+          render();
+        } catch (error) {
+          setMessage('error', error.message);
+        }
+        break;
+      }
+      case 'award-xp': {
+        const campaignId = target.dataset.campaignId;
+        const characterId = target.dataset.characterId;
+        const memberId = target.dataset.memberId;
+        const input = document.getElementById(`xp-${memberId}`);
+        const amount = Number(input?.value || 0);
+        
+        if (amount <= 0) {
+          setMessage('error', 'Please enter a valid XP amount.');
+          return;
+        }
+        
+        try {
+          const result = await CampaignDashboard.CampaignMembers.awardXP(campaignId, characterId, amount);
+          if (result.levelUpAvailable) {
+            setMessage('success', `Awarded ${amount} XP. Character can level up!`);
+          } else {
+            setMessage('success', `Awarded ${amount} XP.`);
+          }
+          if (input) input.value = '';
+          await CampaignDashboard.CampaignMembers.loadMembers(campaignId);
+          render();
+        } catch (error) {
+          setMessage('error', error.message);
+        }
+        break;
+      }
       default:
         break;
     }
@@ -3661,6 +3881,11 @@ function handleInput(event) {
   if (target.matches('[data-wizard-bind]')) {
     updateWizardDraft(target.dataset.wizardBind, readFormControlValue(target));
     render();
+    return;
+  }
+
+  if (target.matches('[data-field]')) {
+    CampaignDashboard.updateCreateDraft(target.dataset.field, readFormControlValue(target));
     return;
   }
 

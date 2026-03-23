@@ -8,7 +8,12 @@ export function renderTopbar({
   editionFilter,
   editionOptions,
   canInstall,
+  pendingInviteCount = 0,
 }) {
+  const inviteBadge = pendingInviteCount > 0 
+    ? `<span class="badge badge--alert">${escapeHtml(String(pendingInviteCount))}</span>` 
+    : '';
+  
   return `
     <header class="panel topbar topbar--campaign ${focusMode ? 'topbar--sheet-focus' : ''}">
       <div class="topbar__copy">
@@ -32,6 +37,7 @@ export function renderTopbar({
         </select>
         ${canInstall ? '<button class="button subtle topbar__install" data-action="install-pwa">Install App</button>' : ''}
         ${focusMode ? '<button class="button subtle" data-action="back-to-roster">Characters</button>' : ''}
+        <button class="button subtle" data-action="open-campaigns">Campaigns ${inviteBadge}</button>
         <button class="button subtle" data-action="open-compendium">Compendium</button>
         <button class="button" data-action="logout">Sign Out</button>
       </div>

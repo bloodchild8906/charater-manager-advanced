@@ -93,6 +93,14 @@ jobs:
           echo "::endgroup::"
           echo "✅ All tests passed"
 
+      # ── Campaign Tests ─────────────────────────────────────────────────────────
+      - name: 🎲 Run campaign integration tests
+        run: |
+          echo "::group::Campaign test runner output"
+          npm run test:campaign
+          echo "::endgroup::"
+          echo "✅ Campaign tests passed"
+
       # ── Database Seed ──────────────────────────────────────────────────────────
       - name: 🌱 Seed selected database
         if: ${{ inputs.skip_seed != 'true' }}

@@ -1,0 +1,203 @@
+/* Campaign Members Tab Styles */
+
+.members-tab {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.members-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.members-section .section-title {
+    font-family: var(--heading);
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--accent);
+    margin: 0;
+}
+
+.member-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+/* Member Card */
+.member-card {
+    background: var(--panel-bg);
+    border: 2px solid rgba(243, 211, 147, 0.2);
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: all 0.2s;
+}
+
+.member-card:hover {
+    border-color: rgba(243, 211, 147, 0.4);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.member-card__header {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.member-card__portrait {
+    width: 64px;
+    height: 64px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.member-card__portrait--placeholder {
+    background: linear-gradient(135deg, rgba(243, 211, 147, 0.3), rgba(243, 211, 147, 0.1));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.member-card__info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.member-card__name {
+    font-family: var(--heading);
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+    color: var(--text);
+}
+
+.member-card__meta {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.member-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* HP Bar */
+.hp-bar-container {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.hp-bar {
+    height: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+.hp-bar__fill {
+    height: 100%;
+    transition: width 0.3s ease, background-color 0.3s ease;
+    border-radius: 4px;
+}
+
+.hp-bar--healthy .hp-bar__fill {
+    background: linear-gradient(90deg, #16a34a, #22c55e);
+}
+
+.hp-bar--wounded .hp-bar__fill {
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+
+.hp-bar--critical .hp-bar__fill {
+    background: linear-gradient(90deg, #dc2626, #ef4444);
+}
+
+.hp-bar__label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+/* Condition Pills */
+.condition-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.condition-pill {
+    background: rgba(243, 211, 147, 0.2);
+    color: var(--accent);
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border: 1px solid rgba(243, 211, 147, 0.3);
+}
+
+/* DM Controls */
+.member-card__dm-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(243, 211, 147, 0.2);
+}
+
+.dm-controls-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    background: rgba(243, 211, 147, 0.05);
+    border-radius: 6px;
+    border: 1px solid rgba(243, 211, 147, 0.2);
+}
+
+.dm-quick-action {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.dm-quick-action .label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.input-group {
+    display: flex;
+    gap: 8px;
+}
+
+.input-group .input {
+    flex: 1;
+}
+
+/* Badge variants */
+.badge--warning {
+    background: #f59e0b;
+    color: white;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .member-grid {
+        grid-template-columns: 1fr;
+    }
+}

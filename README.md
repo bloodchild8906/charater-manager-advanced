@@ -19,6 +19,7 @@ The runtime app is a lightweight D&D 5e character manager with:
 - Integrated 3D dice rolling with Dice Box
 - Support for item resources, item-granted spells, ammunition, and attunement
 - Local SQLite, Azure SQL, and MongoDB runtime backends
+- **Campaign Manager** for GMs to run multi-player campaigns with real-time session tools
 
 ## Feature Inventory
 
@@ -203,6 +204,108 @@ This includes:
 - Role changes between `admin`, `gm`, and `player`
 - Admin/GM access to broader character visibility
 
+### Campaign Manager
+
+The Campaign Manager allows GMs to create and run multi-player campaigns with real-time session tools.
+
+#### Campaign Features
+
+- **Campaign CRUD**: Create, update, archive, and delete campaigns
+- **Visibility Settings**: Private, invite-only, or public campaigns
+- **Member Management**: Invite players, manage member status, track attendance
+- **Invitation System**: Generate shareable invite links with expiration
+- **DM Sheet Access**: View and edit any member's character sheet with audit trail
+- **DM Private Notes**: Per-character notes visible only to the DM
+
+#### Session Management
+
+- **Session Logging**: Record session date, duration, summary, and attendance
+- **Event Timeline**: Log in-world events tied to sessions
+- **Loot System**: Party loot chest with distribution to characters
+- **XP Awards**: Bulk or individual XP grants with level-up detection
+- **Damage/Healing**: Apply HP changes to characters with SSE broadcast
+
+#### Campaign Compendium
+
+- **Custom Content**: Create campaign-specific items, spells, features, monsters, NPCs, locations, lore, and factions
+- **DM-Only Entries**: Toggle visibility to hide content from players
+- **Grant to Character**: Directly add compendium entries to character sheets
+- **SRD Cloning**: Import SRD entries into campaign compendium for customization
+
+#### Live Session Tools
+
+- **Initiative Tracker**: Floating panel with drag-to-reorder, NPC support, and turn tracking
+- **HP Grid**: Compact party HP overview with inline damage/healing controls
+- **Condition Tracker**: Apply and remove conditions with visual indicators
+- **Real-Time SSE**: Server-sent events broadcast HP, conditions, and initiative changes to all connected clients
+
+#### API Routes
+
+All campaign routes are under `/api/campaigns`:
+
+| Route                                                 | Method | Description                 |
+| ----------------------------------------------------- | ------ | --------------------------- |
+| `/api/campaigns`                                      | POST   | Create campaign             |
+| `/api/campaigns`                                      | GET    | List own + joined campaigns |
+| `/api/campaigns/public`                               | GET    | Browse public campaigns     |
+| `/api/campaigns/:id`                                  | GET    | Campaign detail             |
+| `/api/campaigns/:id`                                  | PATCH  | Update campaign             |
+| `/api/campaigns/:id`                                  | DELETE | Delete campaign             |
+| `/api/campaigns/:id/archive`                          | POST   | Archive/unarchive campaign  |
+| `/api/campaigns/:id/transfer`                         | POST   | Transfer DM role            |
+| `/api/campaigns/:id/invite`                           | POST   | Invite character by ID      |
+| `/api/campaigns/:id/invite-link`                      | POST   | Generate invite token       |
+| `/api/campaigns/:id/members`                          | GET    | List members                |
+| `/api/campaigns/:id/members/:mId`                     | PATCH  | Update member status        |
+| `/api/campaigns/:id/members/:mId/notes`               | PATCH  | Update DM notes             |
+| `/api/campaigns/:id/members/:mId`                     | DELETE | Remove member               |
+| `/api/campaigns/invites/pending`                      | GET    | Pending invites for user    |
+| `/api/campaigns/join/:token`                          | GET    | Preview campaign from token |
+| `/api/campaigns/join/:token`                          | POST   | Join campaign via token     |
+| `/api/campaigns/:id/characters/:cId`                  | GET    | DM view of character        |
+| `/api/campaigns/:id/characters/:cId`                  | PATCH  | DM edit character           |
+| `/api/campaigns/:id/characters/:cId/award-xp`         | POST   | Award XP                    |
+| `/api/campaigns/:id/characters/:cId/apply-damage`     | POST   | Apply damage                |
+| `/api/campaigns/:id/characters/:cId/apply-healing`    | POST   | Apply healing               |
+| `/api/campaigns/:id/characters/:cId/grant-item`       | POST   | Grant item                  |
+| `/api/campaigns/:id/characters/:cId/apply-condition`  | POST   | Apply condition             |
+| `/api/campaigns/:id/characters/:cId/conditions/:cond` | DELETE | Remove condition            |
+| `/api/campaigns/:id/bulk-action`                      | POST   | Bulk DM action              |
+| `/api/campaigns/:id/sessions`                         | POST   | Create session              |
+| `/api/campaigns/:id/sessions`                         | GET    | List sessions               |
+| `/api/campaigns/:id/sessions/:sId`                    | PATCH  | Update session              |
+| `/api/campaigns/:id/sessions/:sId/attendance`         | POST   | Update attendance           |
+| `/api/campaigns/:id/events`                           | POST   | Create event                |
+| `/api/campaigns/:id/events`                           | GET    | List events                 |
+| `/api/campaigns/:id/events/:eId/apply`                | POST   | Apply event                 |
+| `/api/campaigns/:id/compendium`                       | GET    | Search compendium           |
+| `/api/campaigns/:id/compendium/:eId`                  | GET    | Get entry                   |
+| `/api/campaigns/:id/compendium`                       | POST   | Create entry                |
+| `/api/campaigns/:id/compendium/:eId`                  | PATCH  | Update entry                |
+| `/api/campaigns/:id/compendium/:eId`                  | DELETE | Delete entry                |
+| `/api/campaigns/:id/compendium/:eId/grant`            | POST   | Grant to character          |
+| `/api/campaigns/:id/houserules`                       | GET    | Get house rules             |
+| `/api/campaigns/:id/houserules`                       | PUT    | Update house rules          |
+| `/api/campaigns/:id/audit`                            | GET    | Audit log (DM only)         |
+| `/api/campaigns/:id/stream`                           | GET    | SSE event stream            |
+
+#### SSE Event Types
+
+| Event                 | Payload                                   | Description              |
+| --------------------- | ----------------------------------------- | ------------------------ |
+| `hp_updated`          | `{ characterId, currentHp, maxHp }`       | Character HP changed     |
+| `condition_applied`   | `{ characterId, condition, source }`      | Condition added          |
+| `condition_removed`   | `{ characterId, condition }`              | Condition removed        |
+| `initiative_updated`  | `{ order: [...] }`                        | Initiative order changed |
+| `turn_advanced`       | `{ currentCharacterId, round }`           | Combat turn advanced     |
+| `dice_roll_broadcast` | `{ characterId, formula, result, total }` | Dice roll shared         |
+| `dm_broadcast`        | `{ message, severity }`                   | DM announcement          |
+| `loot_updated`        | `{ eventId, action, item }`               | Loot distributed         |
+| `session_started`     | `{ sessionId, dmName }`                   | Session began            |
+| `session_ended`       | `{ sessionId }`                           | Session ended            |
+| `member_joined`       | `{ characterId, characterName }`          | Member joined campaign   |
+| `catch_up`            | `{ hpGrid, conditions, initiativeOrder }` | State sync on reconnect  |
+
 ## Data And Database Features
 
 The normalized database schema includes:
@@ -363,6 +466,7 @@ Available scripts:
 
 - `npm run lint`
 - `npm test`
+- `npm run test:campaign`
 - `npm run coverage`
 - `npm run build:ts`
 
@@ -370,6 +474,7 @@ What they cover:
 
 - ESLint across server, scripts, and frontend modules
 - Vitest coverage for store logic and frontend helper/render modules
+- Campaign integration tests for all campaign routes and SSE functionality
 - TypeScript compilation for the seed/build scripts
 
 ## Azure App Service Deployment
