@@ -148,6 +148,13 @@ jobs:
           echo "→ Copying data directory..."
           cp -R data deploy-package/data
 
+          echo "→ Copying scripts directory (built files)..."
+          mkdir -p deploy-package/scripts
+          cp scripts/sqliteAppBaseSchema.cjs deploy-package/scripts/
+          if [ -d scripts/built ]; then
+            cp -R scripts/built deploy-package/scripts/
+          fi
+
           if [ -d public ]; then
             echo "→ Copying public directory..."
             cp -R public deploy-package/public
