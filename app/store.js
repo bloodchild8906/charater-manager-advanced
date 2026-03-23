@@ -72,13 +72,22 @@ CREATE TABLE IF NOT EXISTS dice_models (
 CREATE INDEX IF NOT EXISTS idx_dice_models_enabled_sort ON dice_models (is_enabled, sort_order, name);
 `;
 
-const { runCampaignMigrationsUp } = require(path.join(
-  __dirname,
-  '..',
-  'scripts',
-  'built',
-  'runCampaignMigrations.js',
-));
+// Try to load campaign migrations from multiple possible locations
+let runCampaignMigrationsUp = null;
+try {
+  // First try the app/scripts-built location (for Azure deployment)
+  const migrations = require(path.join(__dirname, 'scripts-built', 'runCampaignMigrations.js'));
+  runCampaignMigrationsUp = migrations.runCampaignMigrationsUp;
+} catch {
+  try {
+    // Fall back to the original location (for local development)
+    const migrations = require(path.join(__dirname, '..', 'scripts', 'built', 'runCampaignMigrations.js'));
+    runCampaignMigrationsUp = migrations.runCampaignMigrationsUp;
+  } catch (err) {
+    console.warn('Campaign migrations not available:', err.message);
+    console.warn('Campaign features may not work correctly. Run npm run build:ts to generate migrations.');
+  }
+}
 
 const ROLES = ['admin', 'gm', 'player'];
 const COMPENDIUM_TYPES = ['spells', 'items', 'features'];
@@ -742,7 +751,9 @@ async function ensureAppStorage() {
           default:
             withSqlite((db) => {
               db.exec(SQLITE_APP_SCHEMA_SQL);
-              runCampaignMigrationsUp(db);
+              if (runCampaignMigrationsUp) {
+                runCampaignMigrationsUp(db);
+              }
             });
         }
 

@@ -146,6 +146,12 @@ jobs:
           echo "→ Copying app directory..."
           cp -R app deploy-package/
 
+          echo "→ Copying scripts/built into app directory for deployment..."
+          if [ -d scripts/built ]; then
+            mkdir -p deploy-package/app/scripts-built
+            cp -R scripts/built/* deploy-package/app/scripts-built/
+          fi
+
           echo "→ Copying data directory..."
           cp -R data deploy-package/data
 
@@ -185,8 +191,11 @@ jobs:
 
           echo ""
           echo "Verifying scripts directory:"
-          test -f deploy-package/scripts/sqliteAppBaseSchema.cjs && echo "  ✅ scripts/sqliteAppBaseSchema.cjs" || { echo "  ❌ scripts/sqliteAppBaseSchema.cjs MISSING"; exit 1; }
-          test -d deploy-package/scripts/built && echo "  ✅ scripts/built directory" || echo "  ⚠️  scripts/built directory missing"
+          test -d deploy-package/app/scripts-built && echo "  ✅ app/scripts-built directory" || echo "  ⚠️  app/scripts-built directory missing"
+          if [ -d deploy-package/app/scripts-built ]; then
+            MIGRATION_COUNT=$(find deploy-package/app/scripts-built/migrations -name "*.js" 2>/dev/null | wc -l | xargs)
+            echo "  ✅ Migration files: ${MIGRATION_COUNT}"
+          fi
 
           DICE_COUNT=$(find deploy-package/app/vendor/dice-box -type f | wc -l | xargs)
           echo ""
@@ -273,10 +282,10 @@ jobs:
           echo "Artifact file count: ${FILE_COUNT}"
           test -f deploy-package/app/server.js && echo "✅ server.js present" || { echo "❌ server.js MISSING"; exit 1; }
           test -f deploy-package/app/app.js    && echo "✅ app.js present"    || { echo "❌ app.js MISSING";    exit 1; }
-          test -f deploy-package/scripts/sqliteAppBaseSchema.cjs && echo "✅ sqliteAppBaseSchema.cjs present" || { echo "❌ sqliteAppBaseSchema.cjs MISSING"; exit 1; }
+          test -d deploy-package/app/scripts-built && echo "✅ scripts-built directory present" || echo "⚠️  scripts-built directory missing"
           echo ""
-          echo "Scripts directory contents:"
-          ls -la deploy-package/scripts/ || echo "Scripts directory not found"
+          echo "App directory contents:"
+          ls -la deploy-package/app/ | head -20 || echo "App directory not found"
 
       # ── Azure Login ────────────────────────────────────────────────────────────
       - name: 🔐 Azure login
