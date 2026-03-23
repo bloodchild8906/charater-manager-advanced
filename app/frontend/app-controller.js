@@ -2387,12 +2387,79 @@ function renderItemCastingPanel(character) {
   `;
 }
 
+function renderSpellSlotsPanel(character) {
+  const spellSlots = character.data.spellSlots || {};
+  const hasAnySlots = Object.values(spellSlots).some(slot => slot.max > 0);
+
+  if (!hasAnySlots) {
+    return '';
+  }
+
+  return `
+    <section class="editor-card sheet-card sheet-card--wide">
+      <div class="panel-header">
+        <div>
+          <div class="section-title">Spell Slots</div>
+          <div class="muted">Track available spell slots by level.</div>
+        </div>
+        <button class="button subtle button--small" data-action="reset-spell-slots">Reset All</button>
+      </div>
+      <div class="spell-slots-grid">
+        ${Object.keys(spellSlots).map((level) => {
+          const slot = spellSlots[level];
+          if (!slot || slot.max === 0) return '';
+          
+          return `
+            <div class="spell-slot-level">
+              <div class="spell-slot-level__header">
+                <span class="spell-slot-level__label">${level === '0' ? 'Cantrips' : `Level ${level}`}</span>
+                <span class="spell-slot-level__count">${slot.current}/${slot.max}</span>
+              </div>
+              <div class="spell-slot-boxes">
+                ${Array.from({ length: slot.max }, (_, i) => `
+                  <button 
+                    class="spell-slot-box ${i < slot.current ? 'available' : 'used'}"
+                    data-action="toggle-spell-slot"
+                    data-level="${level}"
+                    data-index="${i}"
+                  ></button>
+                `).join('')}
+              </div>
+              <div class="spell-slot-controls">
+                <input 
+                  class="input input--small" 
+                  type="number" 
+                  min="0" 
+                  max="${slot.max}"
+                  data-bind="spellSlots.${level}.current" 
+                  value="${escapeHtml(String(slot.current))}"
+                  placeholder="Current"
+                />
+                <span class="spell-slot-divider">/</span>
+                <input 
+                  class="input input--small" 
+                  type="number" 
+                  min="0" 
+                  data-bind="spellSlots.${level}.max" 
+                  value="${escapeHtml(String(slot.max))}"
+                  placeholder="Max"
+                />
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </section>
+  `;
+}
+
 function renderSpellSection(character) {
   const spellAttackModifier = getSpellAttackModifier(character);
   const spellSaveDc = getSpellSaveDc(character);
 
   return `
     <div class="sheet-panel-grid">
+      ${renderSpellSlotsPanel(character)}
       ${renderSpellcastingPanel(character)}
       ${renderItemCastingPanel(character)}
       <section class="editor-card editor-card--section droppable-zone sheet-card sheet-card--wide" data-dropzone="spells">
@@ -3040,6 +3107,9 @@ function renderOverviewTab(character) {
       </section>
       ${renderAbilitiesPanel(character)}
       ${renderSkillsPanel(character)}
+      ${renderExhaustionPanel(character)}
+      ${renderPersonalityPanel(character)}
+      ${renderConnectionsPanel(character)}
       ${renderConditionsPanel(character)}
     </div>
   `;
@@ -3071,6 +3141,9 @@ function renderCombatTab(character) {
           <label class="field"><span class="label">Initiative</span><input class="input" type="number" min="-20" max="20" data-bind="initiative" value="${escapeHtml(character.data.initiative)}" /></label>
         </div>
       </section>
+      ${renderDeathSavesPanel(character)}
+      ${renderHitDicePanel(character)}
+      ${renderSorceryPointsPanel(character)}
       ${renderAttackSection(character)}
       ${renderConditionsPanel(character)}
     </div>
@@ -3087,6 +3160,375 @@ function renderNotesPanel(character) {
         </div>
       </div>
       <textarea class="textarea textarea--notes" data-bind="notes">${escapeHtml(character.data.notes || '')}</textarea>
+    </section>
+  `;
+}
+
+function renderExhaustionPanel(character) {
+  const exhaustionLevel = Number(character.data.exhaustion || 0);
+  const exhaustionEffects = [
+    'None',
+    'Disadvantage on ability checks',
+    'Speed halved',
+    'Disadvantage on attack rolls and saving throws',
+    'Hit point maximum halved',
+    'Speed reduced to 0',
+    'Death',
+  ];
+
+  return `
+    <section class="editor-card sheet-card">
+      <div class="panel-header">
+        <div>
+          <div class="section-title">Exhaustion</div>
+          <div class="muted">Track exhaustion levels and their cumulative effects.</div>
+        </div>
+      </div>
+      <div class="exhaustion-grid">
+        ${Array.from({ length: 7 }, (_, level) => `
+          <button 
+            class="exhaustion-level ${exhaustionLevel === level ? 'active' : ''} ${exhaustionLevel > level ? 'passed' : ''}"
+            data-action="set-exhaustion"
+            data-level="${level}"
+          >
+            <span class="exhaustion-level__number">${level}</span>
+            <span class="exhaustion-level__effect">${escapeHtml(exhaustionEffects[level])}</span>
+          </button>
+        `).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function renderPersonalityPanel(character) {
+  return `
+    <section class="editor-card sheet-card sheet-card--wide">
+      <div class="panel-header">
+        <div>
+          <div class="section-title">Personality</div>
+          <div class="muted">Define your character's core traits and motivations.</div>
+        </div>
+      </div>
+      <div class="personality-grid">
+        <label class="field">
+          <span class="label">Trait</span>
+          <textarea class="textarea" data-bind="personality.trait" rows="2">${escapeHtml(character.data.personality?.trait || '')}</textarea>
+        </label>
+        <label class="field">
+          <span class="label">Ideal</span>
+          <textarea class="textarea" data-bind="personality.ideal" rows="2">${escapeHtml(character.data.personality?.ideal || '')}</textarea>
+        </label>
+        <label class="field">
+          <span class="label">Bond</span>
+          <textarea class="textarea" data-bind="personality.bond" rows="2">${escapeHtml(character.data.personality?.bond || '')}</textarea>
+        </label>
+        <label class="field">
+          <span class="label">Flaw</span>
+          <textarea class="textarea" data-bind="personality.flaw" rows="2">${escapeHtml(character.data.personality?.flaw || '')}</textarea>
+        </label>
+        <label class="field">
+          <span class="label">Obsession</span>
+          <textarea class="textarea" data-bind="personality.obsession" rows="2">${escapeHtml(character.data.personality?.obsession || '')}</textarea>
+        </label>
+      </div>
+    </section>
+  `;
+}
+
+function renderConnectionsPanel(character) {
+  return `
+    <section class="editor-card sheet-card sheet-card--wide">
+      <div class="panel-header">
+        <div>
+          <div class="section-title">Connections</div>
+          <div class="muted">${escapeHtml(character.data.connections?.length || 0)} relationship${(character.data.connections?.length || 0) === 1 ? '' : 's'} tracked</div>
+        </div>
+        <button class="button subtle" data-action="add-connection">Add Connection</button>
+      </div>
+      <div class="item-list">
+        ${
+          !character.data.connections || character.data.connections.length === 0
+            ? '<div class="empty-card">No connections yet. Track relationships with NPCs, organizations, or factions.</div>'
+            : character.data.connections
+                .map(
+                  (conn, index) => `
+                    <div class="entry sheet-entry-row">
+                      <div class="sheet-entry-row__copy">
+                        <strong>${escapeHtml(conn.name || 'Connection')}</strong>
+                        <div class="muted">${escapeHtml(conn.relationship || '')}</div>
+                      </div>
+                      <div class="button-row button-row--tight">
+                        <button class="button subtle button--small" data-action="edit-connection" data-index="${index}">Edit</button>
+                        <button class="button danger button--small" data-action="remove-connection" data-index="${index}">Remove</button>
+                      </div>
+                    </div>
+                  `
+                )
+                .join('')
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderDeathSavesPanel(character) {
+  const successes = Number(character.data.deathSaves?.successes || 0);
+  const failures = Number(character.data.deathSaves?.failures || 0);
+
+  return `
+    <section class="editor-card sheet-card">
+      <div class="panel-header">
+        <div>
+          <div class="section-title">Death Saves</div>
+          <div class="muted">Track death saving throws when at 0 HP.</div>
+        </div>
+        <button class="button subtle button--small" data-action="reset-death-saves">Reset</button>
+      </div>
+      <div class="death-saves-grid">
+        <div class="death-saves-row">
+          <span class="label">Successes</span>
+          <div class="death-save-boxes">
+            ${Array.from({ length: 3 }, (_, i) => `
+              <button 
+                class="death-save-box ${i < successes ? 'active success' : ''}"
+                data-action="toggle-death-save"
+                data-type="successes"
+                data-index="${i}"
+              ></button>
+            `).join('')}
+          </div>
+        </div>
+        <div class="death-saves-row">
+          <span class="label">Failures</span>
+          <div class="death-save-boxes">
+            ${Array.from({ length: 3 }, (_, i) => `
+              <button 
+                class="death-save-box ${i < failures ? 'active failure' : ''}"
+                data-action="toggle-death-save"
+                data-type="failures"
+                data-index="${i}"
+              ></button>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderHitDicePanel(character) {
+  const current = Number(character.data.hitDice?.current || 0);
+  const max = Number(character.data.hitDice?.max || character.data.level || 1);
+
+  return `
+    <section class="editor-card sheet-card">
+      <div class="panel-header">
+        <div>
+          <div class="section-title">Hit Dice</div>
+          <div class="muted">Track available hit dice for short rest recovery.</div>
+        </div>
+      </div>
+      <div class="resource-grid">
+        <label class="field">
+          <span class="label">Current</span>
+          <input class="input" type="number" min="0" data-bind="hitDice.current" value="${escapeHtml(String(current))}" />
+        </label>
+        <label class="field">
+          <span class="label">Maximum</span>
+          <input class="input" type="number" min="0" data-bind="hitDice.max" value="${escapeHtml(String(max))}" />
+        </label>
+      </div>
+    </section>
+  `;
+}
+
+function renderSorceryPointsPanel(character) {
+  const current = Number(character.data.sorceryPoints?.current || 0);
+  const max = Number(character.data.sorceryPoints?.max || 0);
+
+  if (character.data.classSlug !== 'sorcerer' && max === 0) {
+    return '';
+  }
+
+  return `
+    <section class="editor-card sheet-card">
+      <div class="panel-header">
+        <div>
+          <div class="section-title">Sorcery Points</div>
+          <div class="muted">Track sorcery points for metamagic and spell slots.</div>
+        </div>
+      </div>
+      <div class="resource-grid">
+        <label class="field">
+          <span class="label">Current</span>
+          <input class="input" type="number" min="0" data-bind="sorceryPoints.current" value="${escapeHtml(String(current))}" />
+        </label>
+        <label class="field">
+          <span class="label">Maximum</span>
+          <input class="input" type="number" min="0" data-bind="sorceryPoints.max" value="${escapeHtml(String(max))}" />
+        </label>
+      </div>
+    </section>
+  `;
+}
+
+function renderWildShapeTab(character) {
+  return `
+    <section class="editor-card editor-card--section">
+      <div class="panel-header">
+        <div>
+          <div class="section-title">Wild Shape Forms</div>
+          <div class="muted">${escapeHtml(character.data.wildShapes?.length || 0)} form${(character.data.wildShapes?.length || 0) === 1 ? '' : 's'} available</div>
+        </div>
+        <button class="button subtle" data-action="add-wildshape">Add Form</button>
+      </div>
+      <div class="item-list">
+        ${
+          !character.data.wildShapes || character.data.wildShapes.length === 0
+            ? '<div class="empty-card">No wild shape forms yet. Add beast forms your druid can transform into.</div>'
+            : character.data.wildShapes
+                .map(
+                  (form, index) => `
+                    <div class="entry sheet-entry-row">
+                      <div class="sheet-entry-row__copy">
+                        <strong>${escapeHtml(form.name || 'Beast Form')}</strong>
+                        <div class="muted">${renderMetaBits([
+                          form.stats?.hp ? `HP ${form.stats.hp}` : '',
+                          form.stats?.ac ? `AC ${form.stats.ac}` : '',
+                          form.stats?.speed ? `Speed ${form.stats.speed}` : '',
+                        ])}</div>
+                      </div>
+                      <div class="button-row button-row--tight">
+                        <button class="button subtle button--small" data-action="edit-wildshape" data-index="${index}">Edit</button>
+                        <button class="button danger button--small" data-action="remove-wildshape" data-index="${index}">Remove</button>
+                      </div>
+                    </div>
+                  `
+                )
+                .join('')
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderFamiliarTab(character) {
+  const familiar = character.data.familiar || {};
+  
+  return `
+    <section class="editor-card sheet-card sheet-card--wide">
+      <div class="panel-header">
+        <div>
+          <div class="section-title">Familiar</div>
+          <div class="muted">Track your magical companion's stats and abilities.</div>
+        </div>
+      </div>
+      <div class="familiar-grid">
+        <label class="field">
+          <span class="label">Name</span>
+          <input class="input" data-bind="familiar.name" value="${escapeHtml(familiar.name || '')}" />
+        </label>
+        <label class="field">
+          <span class="label">Type</span>
+          <input class="input" data-bind="familiar.type" value="${escapeHtml(familiar.type || '')}" placeholder="e.g., Owl, Cat, Raven" />
+        </label>
+        <label class="field">
+          <span class="label">HP Current</span>
+          <input class="input" type="number" min="0" data-bind="familiar.hp.current" value="${escapeHtml(String(familiar.hp?.current || 0))}" />
+        </label>
+        <label class="field">
+          <span class="label">HP Max</span>
+          <input class="input" type="number" min="0" data-bind="familiar.hp.max" value="${escapeHtml(String(familiar.hp?.max || 0))}" />
+        </label>
+        <label class="field">
+          <span class="label">Armor Class</span>
+          <input class="input" type="number" min="0" data-bind="familiar.ac" value="${escapeHtml(String(familiar.ac || 0))}" />
+        </label>
+        <label class="field familiar-grid__full">
+          <span class="label">Abilities</span>
+          <textarea class="textarea" data-bind="familiar.abilities" rows="3">${escapeHtml(familiar.abilities || '')}</textarea>
+        </label>
+        <label class="field familiar-grid__full">
+          <span class="label">Notes</span>
+          <textarea class="textarea" data-bind="familiar.notes" rows="3">${escapeHtml(familiar.notes || '')}</textarea>
+        </label>
+      </div>
+    </section>
+  `;
+}
+
+function renderCompanionsTab(character) {
+  return `
+    <section class="editor-card editor-card--section">
+      <div class="panel-header">
+        <div>
+          <div class="section-title">Companions & Pets</div>
+          <div class="muted">${escapeHtml(character.data.companions?.length || 0)} companion${(character.data.companions?.length || 0) === 1 ? '' : 's'} tracked</div>
+        </div>
+        <button class="button subtle" data-action="add-companion">Add Companion</button>
+      </div>
+      <div class="item-list">
+        ${
+          !character.data.companions || character.data.companions.length === 0
+            ? '<div class="empty-card">No companions yet. Track animal companions, mounts, or pets.</div>'
+            : character.data.companions
+                .map(
+                  (companion, index) => `
+                    <div class="entry sheet-entry-row">
+                      <div class="sheet-entry-row__copy">
+                        <strong>${escapeHtml(companion.name || 'Companion')}</strong>
+                        <div class="muted">${renderMetaBits([
+                          companion.type || '',
+                          companion.hp ? `HP ${companion.hp.current}/${companion.hp.max}` : '',
+                          companion.ac ? `AC ${companion.ac}` : '',
+                        ])}</div>
+                      </div>
+                      <div class="button-row button-row--tight">
+                        <button class="button subtle button--small" data-action="edit-companion" data-index="${index}">Edit</button>
+                        <button class="button danger button--small" data-action="remove-companion" data-index="${index}">Remove</button>
+                      </div>
+                    </div>
+                  `
+                )
+                .join('')
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderFollowersTab(character) {
+  return `
+    <section class="editor-card editor-card--section">
+      <div class="panel-header">
+        <div>
+          <div class="section-title">Followers & Retainers</div>
+          <div class="muted">${escapeHtml(character.data.followers?.length || 0)} follower${(character.data.followers?.length || 0) === 1 ? '' : 's'} tracked</div>
+        </div>
+        <button class="button subtle" data-action="add-follower">Add Follower</button>
+      </div>
+      <div class="item-list">
+        ${
+          !character.data.followers || character.data.followers.length === 0
+            ? '<div class="empty-card">No followers yet. Track hirelings, retainers, or NPCs in your service.</div>'
+            : character.data.followers
+                .map(
+                  (follower, index) => `
+                    <div class="entry sheet-entry-row">
+                      <div class="sheet-entry-row__copy">
+                        <strong>${escapeHtml(follower.name || 'Follower')}</strong>
+                        <div class="muted">${escapeHtml(follower.role || '')}</div>
+                      </div>
+                      <div class="button-row button-row--tight">
+                        <button class="button subtle button--small" data-action="edit-follower" data-index="${index}">Edit</button>
+                        <button class="button danger button--small" data-action="remove-follower" data-index="${index}">Remove</button>
+                      </div>
+                    </div>
+                  `
+                )
+                .join('')
+        }
+      </div>
     </section>
   `;
 }
@@ -3117,6 +3559,14 @@ function renderEditor(character) {
     sheetContent = renderSpellSection(character);
   } else if (state.sheetTab === 'features') {
     sheetContent = renderFeatureSection(character);
+  } else if (state.sheetTab === 'wildshape') {
+    sheetContent = renderWildShapeTab(character);
+  } else if (state.sheetTab === 'familiar') {
+    sheetContent = renderFamiliarTab(character);
+  } else if (state.sheetTab === 'companions') {
+    sheetContent = renderCompanionsTab(character);
+  } else if (state.sheetTab === 'followers') {
+    sheetContent = renderFollowersTab(character);
   } else if (state.sheetTab === 'notes') {
     sheetContent = renderNotesPanel(character);
   }
@@ -3477,6 +3927,125 @@ async function handleActionClick(event) {
       case 'toggle-condition':
         toggleCondition(target.dataset.condition);
         break;
+      case 'set-exhaustion': {
+        const character = activeCharacter();
+        if (!character) return;
+        character.data.exhaustion = Number(target.dataset.level);
+        render();
+        break;
+      }
+      case 'toggle-death-save': {
+        const character = activeCharacter();
+        if (!character) return;
+        const type = target.dataset.type;
+        const index = Number(target.dataset.index);
+        const current = Number(character.data.deathSaves?.[type] || 0);
+        character.data.deathSaves[type] = current > index ? index : index + 1;
+        render();
+        break;
+      }
+      case 'reset-death-saves': {
+        const character = activeCharacter();
+        if (!character) return;
+        character.data.deathSaves = { successes: 0, failures: 0 };
+        render();
+        break;
+      }
+      case 'add-connection': {
+        const character = activeCharacter();
+        if (!character) return;
+        if (!Array.isArray(character.data.connections)) {
+          character.data.connections = [];
+        }
+        character.data.connections.push({ name: '', relationship: '', notes: '' });
+        render();
+        break;
+      }
+      case 'remove-connection': {
+        const character = activeCharacter();
+        if (!character) return;
+        const index = Number(target.dataset.index);
+        character.data.connections.splice(index, 1);
+        render();
+        break;
+      }
+      case 'add-wildshape': {
+        const character = activeCharacter();
+        if (!character) return;
+        if (!Array.isArray(character.data.wildShapes)) {
+          character.data.wildShapes = [];
+        }
+        character.data.wildShapes.push({ name: '', stats: {}, abilities: '', notes: '' });
+        render();
+        break;
+      }
+      case 'remove-wildshape': {
+        const character = activeCharacter();
+        if (!character) return;
+        const index = Number(target.dataset.index);
+        character.data.wildShapes.splice(index, 1);
+        render();
+        break;
+      }
+      case 'add-companion': {
+        const character = activeCharacter();
+        if (!character) return;
+        if (!Array.isArray(character.data.companions)) {
+          character.data.companions = [];
+        }
+        character.data.companions.push({ name: '', type: '', hp: { current: 0, max: 0 }, ac: 0, notes: '' });
+        render();
+        break;
+      }
+      case 'remove-companion': {
+        const character = activeCharacter();
+        if (!character) return;
+        const index = Number(target.dataset.index);
+        character.data.companions.splice(index, 1);
+        render();
+        break;
+      }
+      case 'add-follower': {
+        const character = activeCharacter();
+        if (!character) return;
+        if (!Array.isArray(character.data.followers)) {
+          character.data.followers = [];
+        }
+        character.data.followers.push({ name: '', role: '', notes: '' });
+        render();
+        break;
+      }
+      case 'remove-follower': {
+        const character = activeCharacter();
+        if (!character) return;
+        const index = Number(target.dataset.index);
+        character.data.followers.splice(index, 1);
+        render();
+        break;
+      }
+      case 'toggle-spell-slot': {
+        const character = activeCharacter();
+        if (!character) return;
+        const level = target.dataset.level;
+        const index = Number(target.dataset.index);
+        const slot = character.data.spellSlots[level];
+        if (!slot) return;
+        slot.current = slot.current > index ? index : index + 1;
+        render();
+        break;
+      }
+      case 'reset-spell-slots': {
+        const character = activeCharacter();
+        if (!character) return;
+        Object.keys(character.data.spellSlots).forEach((level) => {
+          const slot = character.data.spellSlots[level];
+          if (slot) {
+            slot.current = slot.max;
+          }
+        });
+        render();
+        break;
+      }
       case 'open-levelup-wizard': {
         const character = activeCharacter();
         if (!character) {

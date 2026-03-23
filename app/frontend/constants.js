@@ -87,6 +87,10 @@ export const SHEET_TABS = [
   ['inventory', 'Inventory'],
   ['spells', 'Spells'],
   ['features', 'Features'],
+  ['wildshape', 'Wild Shape'],
+  ['familiar', 'Familiar'],
+  ['companions', 'Companions'],
+  ['followers', 'Followers'],
   ['notes', 'Notes'],
 ];
 
