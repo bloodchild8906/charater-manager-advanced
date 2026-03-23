@@ -78,14 +78,16 @@ try {
   // First try the app/scripts-built location (for Azure deployment)
   const migrations = require(path.join(__dirname, 'scripts-built', 'runCampaignMigrations.js'));
   runCampaignMigrationsUp = migrations.runCampaignMigrationsUp;
+  console.log('✅ Campaign migrations loaded from app/scripts-built');
 } catch {
   try {
     // Fall back to the original location (for local development)
     const migrations = require(path.join(__dirname, '..', 'scripts', 'built', 'runCampaignMigrations.js'));
     runCampaignMigrationsUp = migrations.runCampaignMigrationsUp;
+    console.log('✅ Campaign migrations loaded from scripts/built');
   } catch (err) {
-    console.warn('Campaign migrations not available:', err.message);
-    console.warn('Campaign features may not work correctly. Run npm run build:ts to generate migrations.');
+    console.warn('⚠️  Campaign migrations not available:', err.message);
+    console.warn('⚠️  Campaign features may not work correctly. Run npm run build:ts to generate migrations.');
   }
 }
 
@@ -752,7 +754,11 @@ async function ensureAppStorage() {
             withSqlite((db) => {
               db.exec(SQLITE_APP_SCHEMA_SQL);
               if (runCampaignMigrationsUp) {
+                console.log('Running campaign migrations...');
                 runCampaignMigrationsUp(db);
+                console.log('✅ Campaign migrations completed');
+              } else {
+                console.warn('⚠️  Skipping campaign migrations - not available');
               }
             });
         }
