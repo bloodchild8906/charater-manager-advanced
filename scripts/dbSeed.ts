@@ -1,6 +1,10 @@
 import { getSqliteDbPath, openSqliteDatabase, resetSqliteDatabase } from './dbUtils';
 import { createNormalizedSchema } from './normalizedSchema';
 import { seedNormalizedDatabase } from './seedNormalizedDatabase';
+import { runCampaignMigrationsUp } from './runCampaignMigrations';
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { SQLITE_APP_BASE_SCHEMA_SQL } = require('./sqliteAppBaseSchema.cjs');
 
 export function seedSqliteDatabase() {
   const sqliteDbPath = getSqliteDbPath();
@@ -10,6 +14,8 @@ export function seedSqliteDatabase() {
   try {
     console.log(`Seeding normalized SQLite database at ${sqliteDbPath}`);
     createNormalizedSchema(db);
+    db.exec(SQLITE_APP_BASE_SCHEMA_SQL);
+    runCampaignMigrationsUp(db);
     seedNormalizedDatabase(db);
     console.log('Database seed completed successfully.');
   } catch (error) {

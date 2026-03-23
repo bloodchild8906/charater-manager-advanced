@@ -24,6 +24,7 @@ const {
   updateCharacter,
   updateUserRole,
 } = require('./store');
+const campaignRoutes = require('./routes/campaigns');
 
 const APP_DIR = __dirname;
 const ROOT_DIR = path.resolve(APP_DIR, '..');
@@ -577,6 +578,257 @@ const server = http.createServer(async (request, response) => {
         writeJson(response, 200, { deleted: true });
         return;
       }
+    }
+
+    // Campaign routes
+    if (pathname === '/api/campaigns' && request.method === 'POST') {
+      const body = await readJsonBody(request);
+      request.user = currentUser;
+      request.body = body;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.handleCreateCampaign(request, res);
+      return;
+    }
+
+    if (pathname === '/api/campaigns' && request.method === 'GET') {
+      request.user = currentUser;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.handleListCampaigns(request, res);
+      return;
+    }
+
+    if (pathname === '/api/campaigns/public' && request.method === 'GET') {
+      request.user = currentUser;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.handleGetPublicCampaigns(request, res);
+      return;
+    }
+
+    if (pathname === '/api/campaigns/invites/pending' && request.method === 'GET') {
+      request.user = currentUser;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.handleGetPendingInvites(request, res);
+      return;
+    }
+
+    const campaignJoinMatch = pathname.match(/^\/api\/campaigns\/join\/([^/]+)$/);
+    if (campaignJoinMatch && request.method === 'POST') {
+      const body = await readJsonBody(request);
+      request.user = currentUser;
+      request.body = body;
+      request.params = { token: decodeURIComponent(campaignJoinMatch[1]) };
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.handleJoinCampaign(request, res);
+      return;
+    }
+
+    const campaignMatch = pathname.match(/^\/api\/campaigns\/([^/]+)$/);
+    if (campaignMatch) {
+      const campaignId = decodeURIComponent(campaignMatch[1]);
+      request.params = { id: campaignId };
+      request.user = currentUser;
+
+      if (request.method === 'GET') {
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.handleGetCampaign(request, res);
+        return;
+      }
+
+      if (request.method === 'PATCH') {
+        const body = await readJsonBody(request);
+        request.body = body;
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireDM(request, res, async () => {
+          await campaignRoutes.handleUpdateCampaign(request, res);
+        });
+        return;
+      }
+
+      if (request.method === 'DELETE') {
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireDM(request, res, async () => {
+          await campaignRoutes.handleDeleteCampaign(request, res);
+        });
+        return;
+      }
+    }
+
+    const campaignArchiveMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/archive$/);
+    if (campaignArchiveMatch && request.method === 'POST') {
+      request.params = { id: decodeURIComponent(campaignArchiveMatch[1]) };
+      request.user = currentUser;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleArchiveCampaign(request, res);
+      });
+      return;
+    }
+
+    const campaignTransferMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/transfer$/);
+    if (campaignTransferMatch && request.method === 'POST') {
+      const body = await readJsonBody(request);
+      request.params = { id: decodeURIComponent(campaignTransferMatch[1]) };
+      request.user = currentUser;
+      request.body = body;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleTransferCampaign(request, res);
+      });
+      return;
+    }
+
+    const campaignInviteMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/invite$/);
+    if (campaignInviteMatch && request.method === 'POST') {
+      const body = await readJsonBody(request);
+      request.params = { id: decodeURIComponent(campaignInviteMatch[1]) };
+      request.user = currentUser;
+      request.body = body;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleInviteMember(request, res);
+      });
+      return;
+    }
+
+    const campaignInviteLinkMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/invite-link$/);
+    if (campaignInviteLinkMatch && request.method === 'POST') {
+      const body = await readJsonBody(request);
+      request.params = { id: decodeURIComponent(campaignInviteLinkMatch[1]) };
+      request.user = currentUser;
+      request.body = body;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleCreateInviteLink(request, res);
+      });
+      return;
+    }
+
+    const campaignMembersMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/members$/);
+    if (campaignMembersMatch && request.method === 'GET') {
+      request.params = { id: decodeURIComponent(campaignMembersMatch[1]) };
+      request.user = currentUser;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireCampaignMember(request, res, async () => {
+        await campaignRoutes.handleGetMembers(request, res);
+      });
+      return;
+    }
+
+    const campaignMemberMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/members\/([^/]+)$/);
+    if (campaignMemberMatch) {
+      request.params = {
+        id: decodeURIComponent(campaignMemberMatch[1]),
+        memberId: decodeURIComponent(campaignMemberMatch[2]),
+      };
+      request.user = currentUser;
+
+      if (request.method === 'PATCH') {
+        const body = await readJsonBody(request);
+        request.body = body;
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireDM(request, res, async () => {
+          await campaignRoutes.handleUpdateMember(request, res);
+        });
+        return;
+      }
+
+      if (request.method === 'DELETE') {
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireDM(request, res, async () => {
+          await campaignRoutes.handleRemoveMember(request, res);
+        });
+        return;
+      }
+    }
+
+    const campaignMemberNotesMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/members\/([^/]+)\/notes$/);
+    if (campaignMemberNotesMatch && request.method === 'PATCH') {
+      const body = await readJsonBody(request);
+      request.params = {
+        id: decodeURIComponent(campaignMemberNotesMatch[1]),
+        memberId: decodeURIComponent(campaignMemberNotesMatch[2]),
+      };
+      request.user = currentUser;
+      request.body = body;
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleUpdateMemberNotes(request, res);
+      });
+      return;
+    }
+
+    const campaignHouseRulesMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/houserules$/);
+    if (campaignHouseRulesMatch) {
+      request.params = { id: decodeURIComponent(campaignHouseRulesMatch[1]) };
+      request.user = currentUser;
+
+      if (request.method === 'GET') {
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireCampaignMember(request, res, async () => {
+          await campaignRoutes.handleGetHouseRules(request, res);
+        });
+        return;
+      }
+
+      if (request.method === 'PUT') {
+        const body = await readJsonBody(request);
+        request.body = body;
+        const res = {
+          status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+        };
+        await campaignRoutes.requireDM(request, res, async () => {
+          await campaignRoutes.handleUpdateHouseRules(request, res);
+        });
+        return;
+      }
+    }
+
+    const campaignAuditMatch = pathname.match(/^\/api\/campaigns\/([^/]+)\/audit$/);
+    if (campaignAuditMatch && request.method === 'GET') {
+      request.params = { id: decodeURIComponent(campaignAuditMatch[1]) };
+      request.user = currentUser;
+      request.query = Object.fromEntries(url.searchParams);
+      const res = {
+        status: (code) => ({ json: (data) => writeJson(response, code, data) }),
+      };
+      await campaignRoutes.requireDM(request, res, async () => {
+        await campaignRoutes.handleGetAuditLog(request, res);
+      });
+      return;
     }
 
     const adminUserMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)$/);

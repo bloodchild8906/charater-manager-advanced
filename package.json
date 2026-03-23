@@ -45,6 +45,7 @@
     "globals": "17.4.0",
     "jsdom": "29.0.1",
     "redis": "5.11.0",
+    "tinyexec": "1.0.4",
     "typescript": "5.9.3",
     "vitest": "4.1.0"
   },

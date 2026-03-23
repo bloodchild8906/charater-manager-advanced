@@ -12,7 +12,7 @@ export function renderTopbar({
   return `
     <header class="panel topbar topbar--campaign ${focusMode ? 'topbar--sheet-focus' : ''}">
       <div class="topbar__copy">
-        <div class="eyebrow">Codex Arcanum Character Manager</div>
+        <div class="eyebrow">World Shapers</div>
         <div class="topbar-title">${focusMode ? 'Character Builder Navigation' : 'Roster and builder workspace.'}</div>
         <div class="topbar-meta">${renderMetaBits([`Signed in as ${session.displayName}`, session.email, activeCharacterName])}</div>
       </div>

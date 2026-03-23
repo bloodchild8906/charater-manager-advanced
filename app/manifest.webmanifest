@@ -1,6 +1,6 @@
 {
-  "name": "Codex Arcanum Character Manager",
-  "short_name": "Codex Arcanum",
+  "name": "World Shapers",
+  "short_name": "World Shapers",
   "description": "A DnD 5e character manager with compendium search, sheet editing, and 3D dice.",
   "start_url": "/",
   "scope": "/",

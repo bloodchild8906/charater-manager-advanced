@@ -1,3 +1,4 @@
+const path = require('node:path');
 const sql = require('mssql');
 const {
   DATABASE_PROVIDERS,
@@ -6,6 +7,20 @@ const {
   getProvider,
   withSqlite,
 } = require('./database');
+
+const { SQLITE_APP_BASE_SCHEMA_SQL: SQLITE_APP_SCHEMA_SQL } = require(path.join(
+  __dirname,
+  '..',
+  'scripts',
+  'sqliteAppBaseSchema.cjs',
+));
+const { runCampaignMigrationsUp } = require(path.join(
+  __dirname,
+  '..',
+  'scripts',
+  'built',
+  'runCampaignMigrations.js',
+));
 
 const ROLES = ['admin', 'gm', 'player'];
 const COMPENDIUM_TYPES = ['spells', 'items', 'features'];
@@ -36,69 +51,6 @@ const DEFAULT_DICE_MODELS = [
     updated_at: DEFAULT_DICE_MODEL_TIMESTAMP,
   },
 ];
-
-const SQLITE_APP_SCHEMA_SQL = `
-CREATE TABLE IF NOT EXISTS users (
-  id TEXT PRIMARY KEY,
-  email TEXT NOT NULL UNIQUE,
-  display_name TEXT NOT NULL,
-  password_hash TEXT NOT NULL,
-  password_salt TEXT NOT NULL,
-  role TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS sessions (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  expires_at TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  last_seen_at TEXT NOT NULL,
-  user_agent TEXT,
-  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions (expires_at);
-
-CREATE TABLE IF NOT EXISTS characters (
-  id TEXT PRIMARY KEY,
-  owner_user_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  edition TEXT NOT NULL,
-  ancestry_slug TEXT,
-  class_slug TEXT,
-  background_slug TEXT,
-  level INTEGER NOT NULL,
-  data_json TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_characters_owner_user_id ON characters (owner_user_id);
-CREATE INDEX IF NOT EXISTS idx_characters_updated_at ON characters (updated_at);
-
-CREATE TABLE IF NOT EXISTS dice_models (
-  id TEXT PRIMARY KEY,
-  key TEXT NOT NULL UNIQUE,
-  name TEXT NOT NULL,
-  description TEXT,
-  asset_path TEXT NOT NULL,
-  theme TEXT NOT NULL,
-  theme_color TEXT,
-  external_theme_url TEXT,
-  config_json TEXT NOT NULL,
-  is_default INTEGER NOT NULL DEFAULT 0,
-  sort_order INTEGER NOT NULL DEFAULT 0,
-  is_enabled INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_dice_models_enabled_sort ON dice_models (is_enabled, sort_order, name);
-`;
 
 const AZURE_SQL_APP_SCHEMA_SQL = `
 IF OBJECT_ID('dbo.[users]', 'U') IS NULL
@@ -199,6 +151,271 @@ END;
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_dice_models_enabled_sort' AND object_id = OBJECT_ID('dbo.[dice_models]'))
 BEGIN
   CREATE INDEX [idx_dice_models_enabled_sort] ON dbo.[dice_models] ([is_enabled], [sort_order], [name]);
+END;
+
+IF OBJECT_ID('dbo.[campaigns]', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.[campaigns] (
+    [id] nvarchar(64) NOT NULL PRIMARY KEY,
+    [name] nvarchar(255) NOT NULL,
+    [description] nvarchar(max) NULL,
+    [world_lore] nvarchar(max) NULL,
+    [banner_url] nvarchar(1024) NULL,
+    [dm_user_id] nvarchar(64) NOT NULL,
+    [status] nvarchar(32) NOT NULL,
+    [visibility] nvarchar(32) NOT NULL,
+    [house_rules] nvarchar(max) NULL,
+    [session_count] int NOT NULL CONSTRAINT [df_campaigns_session_count] DEFAULT 0,
+    [max_players] int NOT NULL CONSTRAINT [df_campaigns_max_players] DEFAULT 6,
+    [created_at] datetimeoffset(7) NOT NULL,
+    [updated_at] datetimeoffset(7) NOT NULL,
+    CONSTRAINT [fk_campaigns_dm_user] FOREIGN KEY ([dm_user_id]) REFERENCES dbo.[users]([id]) ON DELETE CASCADE
+  );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaigns_dm_user_id' AND object_id = OBJECT_ID('dbo.[campaigns]'))
+BEGIN
+  CREATE INDEX [idx_campaigns_dm_user_id] ON dbo.[campaigns] ([dm_user_id]);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaigns_visibility' AND object_id = OBJECT_ID('dbo.[campaigns]'))
+BEGIN
+  CREATE INDEX [idx_campaigns_visibility] ON dbo.[campaigns] ([visibility]);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaigns_status' AND object_id = OBJECT_ID('dbo.[campaigns]'))
+BEGIN
+  CREATE INDEX [idx_campaigns_status] ON dbo.[campaigns] ([status]);
+END;
+
+IF OBJECT_ID('dbo.[campaign_members]', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.[campaign_members] (
+    [id] nvarchar(64) NOT NULL PRIMARY KEY,
+    [campaign_id] nvarchar(64) NOT NULL,
+    [character_id] nvarchar(64) NOT NULL,
+    [user_id] nvarchar(64) NOT NULL,
+    [invited_by_user_id] nvarchar(64) NULL,
+    [status] nvarchar(32) NOT NULL,
+    [player_notes] nvarchar(max) NULL,
+    [dm_notes] nvarchar(max) NULL,
+    [joined_at] datetimeoffset(7) NULL,
+    [created_at] datetimeoffset(7) NOT NULL,
+    [updated_at] datetimeoffset(7) NOT NULL,
+    CONSTRAINT [fk_campaign_members_campaign] FOREIGN KEY ([campaign_id]) REFERENCES dbo.[campaigns]([id]) ON DELETE CASCADE,
+    CONSTRAINT [fk_campaign_members_character] FOREIGN KEY ([character_id]) REFERENCES dbo.[characters]([id]) ON DELETE CASCADE,
+    CONSTRAINT [fk_campaign_members_user] FOREIGN KEY ([user_id]) REFERENCES dbo.[users]([id]) ON DELETE CASCADE,
+    CONSTRAINT [fk_campaign_members_invited_by] FOREIGN KEY ([invited_by_user_id]) REFERENCES dbo.[users]([id]) ON DELETE SET NULL,
+    CONSTRAINT [ux_campaign_members_campaign_character] UNIQUE ([campaign_id], [character_id])
+  );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaign_members_campaign_id' AND object_id = OBJECT_ID('dbo.[campaign_members]'))
+BEGIN
+  CREATE INDEX [idx_campaign_members_campaign_id] ON dbo.[campaign_members] ([campaign_id]);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaign_members_character_id' AND object_id = OBJECT_ID('dbo.[campaign_members]'))
+BEGIN
+  CREATE INDEX [idx_campaign_members_character_id] ON dbo.[campaign_members] ([character_id]);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaign_members_user_id' AND object_id = OBJECT_ID('dbo.[campaign_members]'))
+BEGIN
+  CREATE INDEX [idx_campaign_members_user_id] ON dbo.[campaign_members] ([user_id]);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaign_members_status' AND object_id = OBJECT_ID('dbo.[campaign_members]'))
+BEGIN
+  CREATE INDEX [idx_campaign_members_status] ON dbo.[campaign_members] ([status]);
+END;
+
+IF OBJECT_ID('dbo.[campaign_invites]', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.[campaign_invites] (
+    [id] nvarchar(64) NOT NULL PRIMARY KEY,
+    [campaign_id] nvarchar(64) NOT NULL,
+    [token] nvarchar(128) NOT NULL,
+    [created_by] nvarchar(64) NOT NULL,
+    [target_email] nvarchar(255) NULL,
+    [character_id] nvarchar(64) NULL,
+    [expires_at] datetimeoffset(7) NULL,
+    [used_at] datetimeoffset(7) NULL,
+    [used_by_user_id] nvarchar(64) NULL,
+    [created_at] datetimeoffset(7) NOT NULL,
+    CONSTRAINT [fk_campaign_invites_campaign] FOREIGN KEY ([campaign_id]) REFERENCES dbo.[campaigns]([id]) ON DELETE CASCADE,
+    CONSTRAINT [fk_campaign_invites_created_by] FOREIGN KEY ([created_by]) REFERENCES dbo.[users]([id]) ON DELETE CASCADE,
+    CONSTRAINT [fk_campaign_invites_used_by] FOREIGN KEY ([used_by_user_id]) REFERENCES dbo.[users]([id]) ON DELETE SET NULL
+  );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ux_campaign_invites_token' AND object_id = OBJECT_ID('dbo.[campaign_invites]'))
+BEGIN
+  CREATE UNIQUE INDEX [ux_campaign_invites_token] ON dbo.[campaign_invites] ([token]);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaign_invites_campaign_id' AND object_id = OBJECT_ID('dbo.[campaign_invites]'))
+BEGIN
+  CREATE INDEX [idx_campaign_invites_campaign_id] ON dbo.[campaign_invites] ([campaign_id]);
+END;
+
+IF OBJECT_ID('dbo.[campaign_sessions]', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.[campaign_sessions] (
+    [id] nvarchar(64) NOT NULL PRIMARY KEY,
+    [campaign_id] nvarchar(64) NOT NULL,
+    [session_number] int NOT NULL,
+    [title] nvarchar(512) NULL,
+    [summary] nvarchar(max) NULL,
+    [session_date] nvarchar(64) NULL,
+    [duration_mins] int NULL,
+    [attendance] nvarchar(max) NOT NULL CONSTRAINT [df_campaign_sessions_attendance] DEFAULT (N'[]'),
+    [created_by] nvarchar(64) NOT NULL,
+    [created_at] datetimeoffset(7) NOT NULL,
+    [updated_at] datetimeoffset(7) NOT NULL,
+    CONSTRAINT [fk_campaign_sessions_campaign] FOREIGN KEY ([campaign_id]) REFERENCES dbo.[campaigns]([id]) ON DELETE CASCADE,
+    CONSTRAINT [fk_campaign_sessions_created_by] FOREIGN KEY ([created_by]) REFERENCES dbo.[users]([id]) ON DELETE CASCADE,
+    CONSTRAINT [ux_campaign_sessions_campaign_number] UNIQUE ([campaign_id], [session_number])
+  );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaign_sessions_campaign_id' AND object_id = OBJECT_ID('dbo.[campaign_sessions]'))
+BEGIN
+  CREATE INDEX [idx_campaign_sessions_campaign_id] ON dbo.[campaign_sessions] ([campaign_id]);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaign_sessions_session_date' AND object_id = OBJECT_ID('dbo.[campaign_sessions]'))
+BEGIN
+  CREATE INDEX [idx_campaign_sessions_session_date] ON dbo.[campaign_sessions] ([session_date]);
+END;
+
+IF OBJECT_ID('dbo.[campaign_events]', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.[campaign_events] (
+    [id] nvarchar(64) NOT NULL PRIMARY KEY,
+    [campaign_id] nvarchar(64) NOT NULL,
+    [session_id] nvarchar(64) NULL,
+    [title] nvarchar(512) NULL,
+    [description] nvarchar(max) NULL,
+    [event_type] nvarchar(64) NOT NULL,
+    [payload] nvarchar(max) NULL,
+    [applies_to] nvarchar(max) NULL,
+    [distributed_to] nvarchar(64) NULL,
+    [distributed_at] datetimeoffset(7) NULL,
+    [created_by] nvarchar(64) NOT NULL,
+    [applied_at] datetimeoffset(7) NULL,
+    [created_at] datetimeoffset(7) NOT NULL,
+    CONSTRAINT [fk_campaign_events_campaign] FOREIGN KEY ([campaign_id]) REFERENCES dbo.[campaigns]([id]) ON DELETE CASCADE,
+    CONSTRAINT [fk_campaign_events_session] FOREIGN KEY ([session_id]) REFERENCES dbo.[campaign_sessions]([id]) ON DELETE SET NULL,
+    CONSTRAINT [fk_campaign_events_created_by] FOREIGN KEY ([created_by]) REFERENCES dbo.[users]([id]) ON DELETE CASCADE
+  );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaign_events_campaign_id' AND object_id = OBJECT_ID('dbo.[campaign_events]'))
+BEGIN
+  CREATE INDEX [idx_campaign_events_campaign_id] ON dbo.[campaign_events] ([campaign_id]);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaign_events_session_id' AND object_id = OBJECT_ID('dbo.[campaign_events]'))
+BEGIN
+  CREATE INDEX [idx_campaign_events_session_id] ON dbo.[campaign_events] ([session_id]);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaign_events_event_type' AND object_id = OBJECT_ID('dbo.[campaign_events]'))
+BEGIN
+  CREATE INDEX [idx_campaign_events_event_type] ON dbo.[campaign_events] ([event_type]);
+END;
+
+IF OBJECT_ID('dbo.[campaign_audit_log]', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.[campaign_audit_log] (
+    [id] nvarchar(64) NOT NULL PRIMARY KEY,
+    [campaign_id] nvarchar(64) NOT NULL,
+    [actor_user_id] nvarchar(64) NOT NULL,
+    [action] nvarchar(128) NOT NULL,
+    [target_type] nvarchar(64) NULL,
+    [target_id] nvarchar(64) NULL,
+    [meta] nvarchar(max) NULL,
+    [created_at] datetimeoffset(7) NOT NULL,
+    CONSTRAINT [fk_campaign_audit_campaign] FOREIGN KEY ([campaign_id]) REFERENCES dbo.[campaigns]([id]) ON DELETE CASCADE,
+    CONSTRAINT [fk_campaign_audit_actor] FOREIGN KEY ([actor_user_id]) REFERENCES dbo.[users]([id]) ON DELETE CASCADE
+  );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaign_audit_log_campaign_id' AND object_id = OBJECT_ID('dbo.[campaign_audit_log]'))
+BEGIN
+  CREATE INDEX [idx_campaign_audit_log_campaign_id] ON dbo.[campaign_audit_log] ([campaign_id]);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaign_audit_log_actor_user_id' AND object_id = OBJECT_ID('dbo.[campaign_audit_log]'))
+BEGIN
+  CREATE INDEX [idx_campaign_audit_log_actor_user_id] ON dbo.[campaign_audit_log] ([actor_user_id]);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaign_audit_log_created_at' AND object_id = OBJECT_ID('dbo.[campaign_audit_log]'))
+BEGIN
+  CREATE INDEX [idx_campaign_audit_log_created_at] ON dbo.[campaign_audit_log] ([created_at]);
+END;
+
+IF OBJECT_ID('dbo.[campaign_compendium]', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.[campaign_compendium] (
+    [id] nvarchar(64) NOT NULL PRIMARY KEY,
+    [campaign_id] nvarchar(64) NOT NULL,
+    [content_type] nvarchar(64) NOT NULL,
+    [name] nvarchar(512) NOT NULL,
+    [description] nvarchar(max) NULL,
+    [data] nvarchar(max) NULL,
+    [tags] nvarchar(max) NULL,
+    [is_player_visible] bit NOT NULL CONSTRAINT [df_campaign_compendium_visible] DEFAULT 1,
+    [created_by] nvarchar(64) NOT NULL,
+    [created_at] datetimeoffset(7) NOT NULL,
+    [updated_at] datetimeoffset(7) NOT NULL,
+    CONSTRAINT [fk_campaign_compendium_campaign] FOREIGN KEY ([campaign_id]) REFERENCES dbo.[campaigns]([id]) ON DELETE CASCADE,
+    CONSTRAINT [fk_campaign_compendium_created_by] FOREIGN KEY ([created_by]) REFERENCES dbo.[users]([id]) ON DELETE CASCADE
+  );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaign_compendium_campaign_id' AND object_id = OBJECT_ID('dbo.[campaign_compendium]'))
+BEGIN
+  CREATE INDEX [idx_campaign_compendium_campaign_id] ON dbo.[campaign_compendium] ([campaign_id]);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaign_compendium_content_type' AND object_id = OBJECT_ID('dbo.[campaign_compendium]'))
+BEGIN
+  CREATE INDEX [idx_campaign_compendium_content_type] ON dbo.[campaign_compendium] ([content_type]);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_campaign_compendium_name' AND object_id = OBJECT_ID('dbo.[campaign_compendium]'))
+BEGIN
+  CREATE INDEX [idx_campaign_compendium_name] ON dbo.[campaign_compendium] ([name]);
+END;
+
+IF OBJECT_ID('dbo.[character_conditions]', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.[character_conditions] (
+    [id] nvarchar(64) NOT NULL PRIMARY KEY,
+    [character_id] nvarchar(64) NOT NULL,
+    [condition_name] nvarchar(255) NOT NULL,
+    [source] nvarchar(512) NULL,
+    [applied_by] nvarchar(64) NOT NULL,
+    [campaign_id] nvarchar(64) NOT NULL,
+    [expires_at] datetimeoffset(7) NULL,
+    [created_at] datetimeoffset(7) NOT NULL,
+    CONSTRAINT [fk_character_conditions_character] FOREIGN KEY ([character_id]) REFERENCES dbo.[characters]([id]) ON DELETE CASCADE,
+    CONSTRAINT [fk_character_conditions_applied_by] FOREIGN KEY ([applied_by]) REFERENCES dbo.[users]([id]) ON DELETE CASCADE,
+    CONSTRAINT [fk_character_conditions_campaign] FOREIGN KEY ([campaign_id]) REFERENCES dbo.[campaigns]([id]) ON DELETE CASCADE
+  );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_character_conditions_character_id' AND object_id = OBJECT_ID('dbo.[character_conditions]'))
+BEGIN
+  CREATE INDEX [idx_character_conditions_character_id] ON dbo.[character_conditions] ([character_id]);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_character_conditions_campaign_id' AND object_id = OBJECT_ID('dbo.[character_conditions]'))
+BEGIN
+  CREATE INDEX [idx_character_conditions_campaign_id] ON dbo.[character_conditions] ([campaign_id]);
 END;
 `;
 
@@ -467,6 +684,7 @@ async function ensureAppStorage() {
           default:
             withSqlite((db) => {
               db.exec(SQLITE_APP_SCHEMA_SQL);
+              runCampaignMigrationsUp(db);
             });
         }
 

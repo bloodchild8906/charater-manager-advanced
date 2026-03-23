@@ -5,7 +5,7 @@ export function renderAuthScreen({ authMode, messageHtml = '' }) {
     <div class="screen auth-screen">
       <div class="auth-shell">
         <section class="hero-card hero-card--auth">
-          <div class="eyebrow">Codex Arcanum</div>
+          <div class="eyebrow">World Shapers</div>
           <h1 class="hero-title">Run your campaign vault like it matters.</h1>
           <p class="hero-copy">
             Build sheets, search the SRD compendium, and manage table access in a UI that feels more
