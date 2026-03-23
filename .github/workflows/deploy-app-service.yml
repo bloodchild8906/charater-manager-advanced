@@ -141,6 +141,7 @@ jobs:
           cp package.json      deploy-package/package.json
           cp package-lock.json deploy-package/package-lock.json
           [ -f .npmrc ] && cp .npmrc deploy-package/.npmrc && echo "  → Copied .npmrc" || echo "  → No .npmrc, skipping"
+          [ -f .deployment ] && cp .deployment deploy-package/.deployment && echo "  → Copied .deployment" || echo "  → No .deployment, skipping"
 
           echo "→ Copying app directory..."
           cp -R app deploy-package/
@@ -148,7 +149,7 @@ jobs:
           echo "→ Copying data directory..."
           cp -R data deploy-package/data
 
-          echo "→ Copying scripts directory (built files)..."
+          echo "→ Copying scripts directory..."
           mkdir -p deploy-package/scripts
           cp scripts/sqliteAppBaseSchema.cjs deploy-package/scripts/
           if [ -d scripts/built ]; then
@@ -161,6 +162,9 @@ jobs:
           else
             echo "→ No public directory, skipping"
           fi
+
+          echo "→ Copying node_modules..."
+          cp -R node_modules deploy-package/node_modules
 
           echo "→ Bundling @3d-dice/dice-box vendor assets..."
           mkdir -p deploy-package/app/vendor/dice-box
@@ -302,8 +306,8 @@ jobs:
           const settings = [
             { name: 'WEBSITE_NODE_DEFAULT_VERSION', value: '~24',        slotSetting: false },
             { name: 'NODE_ENV',                     value: 'production', slotSetting: false },
-            { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'true',     slotSetting: false },
-            { name: 'ENABLE_ORYX_BUILD',            value: 'true',       slotSetting: false },
+            { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'false',    slotSetting: false },
+            { name: 'ENABLE_ORYX_BUILD',            value: 'false',      slotSetting: false },
           ];
 
           const optionalSettings = [
